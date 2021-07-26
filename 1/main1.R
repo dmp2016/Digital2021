@@ -2,8 +2,30 @@ library(tidyverse)
 library(scorer)
 library(Rcpp)
 library(optimization)
+library(lubridate)
 # install.packages("optimization")
 # install.packages('Rcpp')
+
+
+C_HOLIDAY <- as.Date(c("2021-02-22", 
+               "2021-02-23",
+               "2021-03-08",
+               "2021-05-03",
+               "2021-05-10",
+               "2021-06-14"))
+
+C_NOT_HOLIDAY <- as.Date(c("2021-02-20"))
+
+
+is_holiday <- function(x){
+  if (x %in% C_HOLIDAY)
+    return(T)
+  if (x %in% C_NOT_HOLIDAY)
+    return(F)
+  if (wday(x) %in% c(1, 7))
+    return(T)
+  return(F)
+}
 
 
 df_train <- read_csv2("1/train.csv", 
@@ -43,6 +65,10 @@ df_train_date$date_int <- as.integer(difftime(df_train_date$date,
                                               units = "days"))
 
 df_train_date$week <- factor(df_train_date$date_int %% 7)
+df_train_date$is_holiday <- factor(sapply(df_train_date$date, is_holiday))
+
+# df_train_date %>% select(date, is_holiday) %>% distinct()
+
 
 oktmo_set <- df_train_date %>% select(oktmo) %>% distinct()
 
@@ -67,35 +93,48 @@ for (cur_oktmo in oktmo_set$oktmo){
                            date_int = predict_dates_int)
 
   for (col_name in predict_cols){
-    fit <- glm(as.formula(paste(col_name, " ~ date_int + week")), data = df_train_date_reg)
-    # df_predict <- tibble(date_int = predict_dates_int)
-    df_predict <- tibble(date_int = predict_dates_int, week = factor(predict_dates_int %% 7))
-    df_predict <- df_predict %>% mutate(!!col_name := predict(fit, df_predict))
-    
-    ###
-    # df_train_date_reg$tmp_predict <- predict(fit, df_train_date_reg)
-    # 
-    # opt_f <- function(x){
-    #   sum(abs(df_train_date_reg$tmp_predict + x[1] * 
-    #             sin(2 * pi * (df_train_date_reg$date_int + x[3]) / x[2])
-    #           - df_train_date_reg[[col_name]]))}
-    
-    
-    # amp <- mean(abs(df_train_date_reg[[col_name]] - df_train_date_reg$tmp_predict)) / 2
-    # 
-    # if (amp > 1){
-    #   res <- optim_sa(opt_f, 
-    #                   start = c(amp, 45, 45),
-    #                   lower = c(0, 1, 0),
-    #                   upper = c(2 * amp, 90, 90))
-    #   ###
-    #   if (res$function_value < opt_f(c(0, 1, 1))){
-    #     print(c(res$function_value, opt_f(c(0, 1, 1))))
-    #     df_predict[[col_name]] <- df_predict[[col_name]] + res$par[1] * 
-    #       sin(2 * pi * (df_predict$date_int  + res$par[3]) / res$par[2])
-    #   }
-    # }
-
+    # df_lm <- df_train_date_reg %>% filter(.[[col_name]] > 0)
+    df_lm <- df_train_date_reg
+    df_predict <- tibble(date_int = predict_dates_int, 
+                         week = factor(predict_dates_int %% 7),
+                         date = predict_dates_int + min_date)
+    df_predict$is_holiday <- factor(sapply(df_predict$date, is_holiday))
+      
+    if (nrow(df_lm) > 0){
+      fit <- glm(as.formula(paste(col_name, " ~ date_int + week + is_holiday")),
+                 data = df_lm)
+      # fit <- lm(as.formula(paste(col_name, " ~ date_int")),
+      #           data = df_lm)
+      df_predict <- df_predict %>% mutate(!!col_name := predict(fit, df_predict))
+      df_predict[[col_name]] <- ifelse(df_predict[[col_name]] < 0, 0, df_predict[[col_name]])
+      
+      ###
+      # df_train_date_reg$tmp_predict <- predict(fit, df_train_date_reg)
+      # 
+      # opt_f <- function(x){
+      #   sum(abs(df_train_date_reg$tmp_predict + x[1] * 
+      #             sin(2 * pi * (df_train_date_reg$date_int + x[3]) / x[2])
+      #           - df_train_date_reg[[col_name]]))}
+      
+      
+      # amp <- mean(abs(df_train_date_reg[[col_name]] - df_train_date_reg$tmp_predict)) / 2
+      # 
+      # if (amp > 1){
+      #   res <- optim_sa(opt_f, 
+      #                   start = c(amp, 45, 45),
+      #                   lower = c(0, 1, 0),
+      #                   upper = c(2 * amp, 90, 90))
+      #   ###
+      #   if (res$function_value < opt_f(c(0, 1, 1))){
+      #     print(c(res$function_value, opt_f(c(0, 1, 1))))
+      #     df_predict[[col_name]] <- df_predict[[col_name]] + res$par[1] * 
+      #       sin(2 * pi * (df_predict$date_int  + res$par[3]) / res$par[2])
+      #   }
+      # }
+      
+    }
+    else
+      df_predict <- df_predict %>% mutate(!!col_name := 0)
     df_predict_reg <- cbind(df_predict_reg, df_predict %>% select(!!col_name))
   }
   
@@ -122,12 +161,11 @@ df_test$date_format <-
                 substr(df_test$date, 1, 2),
                 sep = ""))
 
-df_test[1, 1:4]
-
 df_res <- NULL
 
 for (ind in 1:nrow(df_test)){
-  print(ind)
+  if (ind %% 1000 == 0)
+    print(ind)
   cur_date <- df_test$date_format[ind]
   cur_oktmo <- df_test$oktmo[ind]
   if (is.null(df_res))
@@ -148,6 +186,45 @@ for (ind in 1:nrow(df_test)){
 
 write_csv(df_res, "1/mytest_ord.csv")
 
+df_res[1,]
+
+nrow(df_train %>% select(oktmo) %>% distinct() )
+nrow(df_train %>% select(okato) %>% distinct() )
+nrow(df_train %>% select(region) %>% distinct() )
+
+cur_oktmo <- "64000000000"
+cur_oktmo <- "75000000000"
+col_name <- "bread_value"
+ggplot(data = df_train_date %>% 
+         filter(oktmo == cur_oktmo & date_int <= 150)) +
+  geom_point(aes(x = date_int, y = .data[[col_name]]), col = "blue") +
+  geom_line(aes(x = date_int, y = .data[[col_name]]), col = "blue") +
+  geom_smooth(aes(x = date_int, y = .data[[col_name]]), method = "lm") +
+  geom_point(data = res_predict %>% 
+               filter(oktmo == cur_oktmo & date_int <= 150), 
+             aes(x = date_int, y = .data[[col_name]]), col = "red")
+
+
+#########################
+# Test lm Warnings
+#########################
+
+cur_oktmo <- "66000000000"
+col_name <- "mutton"
+qplot(data = df_train_date %>% 
+        filter(oktmo == cur_oktmo & date_int <= 80 & .[[col_name]] > 0), 
+      x = date_int, 
+      y = mutton)
+
+
+df_lm <- df_train_date %>% filter(oktmo == cur_oktmo & date_int <= 80) %>% filter(.[[col_name]] > 0)
+df_predict <- tibble(date_int = predict_dates_int, week = factor(predict_dates_int %% 7))
+
+fit <- lm(as.formula(paste(col_name, " ~ date_int")), 
+         data = df_lm)
+df_predict <- df_predict %>% mutate(!!col_name := predict(fit, df_predict))
+  
+
 
 #######################################################################
 
@@ -166,15 +243,6 @@ write_csv(df_res, "1/mytest_ord.csv")
 # 
 # write_csv(res_test, "1/mytest.csv")
 
-
-
-
-cur_oktmo <- "64000000000"
-ggplot() +
-  geom_point(data = res_predict %>% filter(oktmo == cur_oktmo), 
-             aes(x = date, pasta_value), col = "red") +
-  geom_point(data = df_train_date %>% filter(oktmo == cur_oktmo), 
-             aes(x = date, pasta_value), col = "blue")
 
 
 
@@ -218,44 +286,27 @@ for (col in predict_cols){
 df_train_reg <- df_train_date %>% filter(oktmo == cur_oktmo)
 
 
-ggplot(data = df_train_reg %>% 
-         arrange(date), aes(x = date, y = bread_value)) +
-  geom_point() +
-  geom_line() +
-  geom_smooth(method = "lm")
-  
-
-ggplot(data = df_train_reg %>% 
-         arrange(date)) +
-  geom_point(aes(x = date_int, y = bread_value)) +
-  geom_line(aes(x = date_int, y = bread_value)) +
-  geom_point(aes(x = date_int, y = pred + amp * sin((2 * pi * date_int + 50) / 30)), 
-             col = "red") +
-  geom_smooth(aes(x = date_int, y = bread_value), method = "lm")
-
-
-
-
-# df_test <- read_csv("1/test.csv", col_types = cols(.default = col_character()))
-# df_test %>% group_by(oktmo) %>% 
-#   summarise(cnt = n()) %>% 
-#   filter(cnt > 91)
-
 df_train_reg$week <- factor(df_train_reg$date_int %% 7)
+weekdays(df_train_reg$date)
+wday(df_train_reg$date)
 
-col_name <- "bread_value"
+
+col_name <- "bread"
 fit <- glm(as.formula(paste(col_name, " ~ date_int + week")), data = df_train_reg)
-fit <- lm(as.formula(paste(col_name, " ~ date_int")), data = df_train_reg)
+# fit <- lm(as.formula(paste(col_name, " ~ date_int")), data = df_train_reg)
 
-df_train_reg$pred <- predict(fit)
+df_train_reg$pred <- predict(fit, df_train_reg)
 
 
 ggplot(data = df_train_reg %>% 
          arrange(date)) +
-  geom_point(aes(x = date_int, y = bread_value)) +
-  geom_line(aes(x = date_int, y = bread_value)) +
+  geom_point(aes(x = date_int, y = bread)) +
+  geom_line(aes(x = date_int, y = bread)) +
   geom_point(aes(x = date_int, y = pred), col = "red") +
-  geom_smooth(aes(x = date_int, y = bread_value), method = "lm")
+  geom_smooth(aes(x = date_int, y = bread), method = "lm")
+
+
+sum(abs(df_train_reg$pred - df_train_reg$bread))
 
 
 
