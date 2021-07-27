@@ -7,12 +7,23 @@ library(lubridate)
 # install.packages('Rcpp')
 
 
-C_HOLIDAY <- as.Date(c("2021-02-22", 
-               "2021-02-23",
-               "2021-03-08",
-               "2021-05-03",
-               "2021-05-10",
-               "2021-06-14"))
+C_HOLIDAY <- as.Date(c(
+  "2021-01-01",
+  "2021-01-02", 
+  "2021-01-03", 
+  "2021-01-04", 
+  "2021-01-05", 
+  "2021-01-06",
+  "2021-01-07", 
+  "2021-01-08", 
+  "2021-01-09", 
+  "2021-01-10", 
+  "2021-02-22", 
+  "2021-02-23",
+  "2021-03-08",
+  "2021-05-03",
+  "2021-05-10",
+  "2021-06-14"))
 
 C_NOT_HOLIDAY <- as.Date(c("2021-02-20"))
 
@@ -54,7 +65,7 @@ df_train$date <- as.Date(paste(substr(df_train$date, 7, 10),
                          sep = ""))
 
 
-start_date <- as.Date("2021-01-15")
+start_date <- as.Date("2021-02-01")
 
 df_train_date <- df_train %>% filter(date >= start_date)
 
@@ -194,7 +205,7 @@ nrow(df_train %>% select(region) %>% distinct() )
 
 cur_oktmo <- "64000000000"
 cur_oktmo <- "75000000000"
-col_name <- "bread_value"
+col_name <- "pasta"
 ggplot(data = df_train_date %>% 
          filter(oktmo == cur_oktmo & date_int <= 150)) +
   geom_point(aes(x = date_int, y = .data[[col_name]]), col = "blue") +
@@ -209,12 +220,12 @@ ggplot(data = df_train_date %>%
 # Test lm Warnings
 #########################
 
-cur_oktmo <- "66000000000"
-col_name <- "mutton"
+cur_oktmo <- "64000000000"
+col_name <- "pasta"
 qplot(data = df_train_date %>% 
         filter(oktmo == cur_oktmo & date_int <= 80 & .[[col_name]] > 0), 
-      x = date_int, 
-      y = mutton)
+      x = date, 
+      y = .data[[col_name]])
 
 
 df_lm <- df_train_date %>% filter(oktmo == cur_oktmo & date_int <= 80) %>% filter(.[[col_name]] > 0)
