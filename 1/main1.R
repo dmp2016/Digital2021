@@ -96,7 +96,7 @@ predict_dates_int = start_date_int:finish_date_int
 
 res_predict <- NULL
 
-for (cur_oktmo in oktmo_set$oktmo){
+for (cur_oktmo in oktmo_set$oktmo[oktmo_set$oktmo == "26000000000"]){
   print(cur_oktmo)
   df_train_date_reg <- df_train_date %>% filter(oktmo == cur_oktmo)
   
@@ -106,17 +106,64 @@ for (cur_oktmo in oktmo_set$oktmo){
   for (col_name in predict_cols){
     # df_lm <- df_train_date_reg %>% filter(.[[col_name]] > 0)
     df_lm <- df_train_date_reg
+    df_lm$isw1 = as.integer(df_lm$week == 1)
+    df_lm$isw2 = as.integer(df_lm$week == 2)
+    df_lm$isw3 = as.integer(df_lm$week == 3)
+    df_lm$isw4 = as.integer(df_lm$week == 4)
+    df_lm$isw5 = as.integer(df_lm$week == 5)
+    df_lm$isw6 = as.integer(df_lm$week == 6)
+    
+    
     df_predict <- tibble(date_int = predict_dates_int, 
                          week = factor(predict_dates_int %% 7),
-                         date = predict_dates_int + min_date)
+                         date = predict_dates_int + min_date,
+                         isw1 = as.integer(week == 1),
+                         isw2 = as.integer(week == 2),
+                         isw3 = as.integer(week == 3),
+                         isw4 = as.integer(week == 4),
+                         isw5 = as.integer(week == 5),
+                         isw6 = as.integer(week == 6))
     df_predict$is_holiday <- factor(sapply(df_predict$date, is_holiday))
       
     if (nrow(df_lm) > 0){
       fit <- glm(as.formula(paste(col_name, " ~ date_int + week + is_holiday")),
                  data = df_lm)
-      # fit <- lm(as.formula(paste(col_name, " ~ date_int")),
-      #           data = df_lm)
-      df_predict <- df_predict %>% mutate(!!col_name := predict(fit, df_predict))
+
+      test_f <- function(x){
+        return(sum(abs(df_lm[[col_name]] - (x[1] + df_lm$date_int * x[2] +
+                                              df_lm$isw1 * x[3] +
+                                              df_lm$isw2 * x[4] +
+                                              df_lm$isw3 * x[5] +
+                                              df_lm$isw4 * x[6] +
+                                              df_lm$isw5 * x[7] +
+                                              df_lm$isw6 * x[8] +
+                                              as.integer(df_lm$is_holiday == "TRUE") * x[9]))))}
+      
+      res <- optim_nm(test_f, k = 9, start = fit$coefficients)
+      # res <- optim_sa(test_f,
+      #                 start = fit$coefficients,
+      #                 lower = fit$coefficients - abs(fit$coefficients) / 2 - 0.1,
+      #                 upper = fit$coefficients + abs(fit$coefficients) / 2 + 0.1)
+      
+      
+      if (test_f(res$par) < test_f(fit$coefficients))
+      {
+        x <- res$par
+        df_predict[[col_name]] <- x[1] + df_predict$date_int * x[2] +
+          df_predict$isw1 * x[3] +
+          df_predict$isw2 * x[4] +
+          df_predict$isw3 * x[5] +
+          df_predict$isw4 * x[6] +
+          df_predict$isw5 * x[7] +
+          df_predict$isw6 * x[8] +
+          as.integer(df_predict$is_holiday == "TRUE") * x[9]
+      }
+      else 
+      {
+       df_predict <- df_predict %>% mutate(!!col_name := predict(fit, df_predict))
+       print("LM is better")
+       print(col_name)
+      }
       df_predict[[col_name]] <- ifelse(df_predict[[col_name]] < 0, 0, df_predict[[col_name]])
       
       ###
@@ -197,30 +244,107 @@ for (ind in 1:nrow(df_test)){
 
 write_csv(df_res, "1/mytest_ord.csv")
 
-df_res[1,]
 
-nrow(df_train %>% select(oktmo) %>% distinct() )
-nrow(df_train %>% select(okato) %>% distinct() )
-nrow(df_train %>% select(region) %>% distinct() )
-
-cur_oktmo <- "64000000000"
-cur_oktmo <- "75000000000"
-col_name <- "pasta"
+######################################################
+# Test prediction on graphic
+######################################################
+cur_oktmo <- "71000000000"
+cur_oktmo <- "26000000000"
+# cur_oktmo <- "64000000000"
+# cur_oktmo <- "75000000000"
+col_name <- "chicken"
 ggplot(data = df_train_date %>% 
-         filter(oktmo == cur_oktmo & date_int <= 150)) +
+         filter(oktmo == cur_oktmo)) +
   geom_point(aes(x = date_int, y = .data[[col_name]]), col = "blue") +
   geom_line(aes(x = date_int, y = .data[[col_name]]), col = "blue") +
   geom_smooth(aes(x = date_int, y = .data[[col_name]]), method = "lm") +
   geom_point(data = res_predict %>% 
-               filter(oktmo == cur_oktmo & date_int <= 150), 
+               filter(oktmo == cur_oktmo), 
              aes(x = date_int, y = .data[[col_name]]), col = "red")
+
+
+######################################################
+# LM prediction
+######################################################
+
+
+cur_oktmo <- "26000000000"
+df_train_date_reg <- df_train_date %>% filter(oktmo == cur_oktmo)
+
+
+df_lm <- df_train_date_reg
+df_lm$isw1 = as.integer(df_lm$week == 1)
+df_lm$isw2 = as.integer(df_lm$week == 2)
+df_lm$isw3 = as.integer(df_lm$week == 3)
+df_lm$isw4 = as.integer(df_lm$week == 4)
+df_lm$isw5 = as.integer(df_lm$week == 5)
+df_lm$isw6 = as.integer(df_lm$week == 6)
+wday(as.Date("2021-07-27"))
+
+df_predict <- tibble(date_int = predict_dates_int, 
+                     week = factor(predict_dates_int %% 7),
+                     date = predict_dates_int + min_date,
+                     isw1 = as.integer(week == 1),
+                     isw2 = as.integer(week == 2),
+                     isw3 = as.integer(week == 3),
+                     isw4 = as.integer(week == 4),
+                     isw5 = as.integer(week == 5),
+                     isw6 = as.integer(week == 6),
+)
+df_predict$is_holiday <- factor(sapply(df_predict$date, is_holiday))
+
+
+col_name  <- "chicken"
+fit <- glm(as.formula(paste(col_name, " ~ date_int + week + is_holiday")),
+           data = df_lm)
+summary(fit)
+# df_predict <- df_predict %>% mutate(!!col_name := predict(fit, df_predict))
+# df_predict[[col_name]] <- ifelse(df_predict[[col_name]] < 0, 0, df_predict[[col_name]])
+
+
+test_f <- function(x){
+  return(sum(abs(df_lm[[col_name]] - (x[1] + df_lm$date_int * x[2] +
+                                        df_lm$isw1 * x[3] +
+                                        df_lm$isw2 * x[4] +
+                                        df_lm$isw3 * x[5] +
+                                        df_lm$isw4 * x[6] +
+                                        df_lm$isw5 * x[7] +
+                                        df_lm$isw6 * x[8] +
+                                        as.integer(df_lm$is_holiday == "TRUE") * x[9]))))}
+
+
+res <- optim_sa(test_f,
+         start = fit$coefficients,
+         lower = fit$coefficients - abs(fit$coefficients) / 2 - 0.1,
+         upper = fit$coefficients + abs(fit$coefficients) / 2 + 0.1)
+
+res <- optim_nm(test_f, start = c(fit$coefficients), k = 9)
+
+test_f(c(fit$coefficients))
+test_f(res$par)
+fit$coefficients
+res$par
+
+ggplot(data = df_train_date %>% 
+         filter(oktmo == cur_oktmo)) +
+  geom_point(aes(x = date_int, y = .data[[col_name]]), col = "blue") +
+  geom_line(aes(x = date_int, y = .data[[col_name]]), col = "blue") +
+  geom_smooth(aes(x = date_int, y = .data[[col_name]]), method = "lm") +
+  geom_point(data = df_predict, 
+             aes(x = date_int, y = .data[[col_name]]), col = "red") +
+  geom_point(data = df_predict,
+             aes(x = date_int, y = res$par[1] + 
+                   date_int * res$par[2] + 
+                   as.integer(is_holiday == "TRUE") * res$par[3]), col = "green")
+
+
 
 
 #########################
 # Test lm Warnings
 #########################
 
-cur_oktmo <- "64000000000"
+cur_oktmo <- "75000000000"
 col_name <- "pasta"
 qplot(data = df_train_date %>% 
         filter(oktmo == cur_oktmo & date_int <= 80 & .[[col_name]] > 0), 
