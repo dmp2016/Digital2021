@@ -72,7 +72,7 @@ df_train$date <- as.Date(paste(substr(df_train$date, 7, 10),
 ##############################################################
 
 
-start_date <- as.Date("2021-01-25")
+start_date <- as.Date("2021-02-01")
 
 df_train_date <- df_train %>% filter(date >= start_date)
 
@@ -90,8 +90,9 @@ df_train_date$is_holiday <- factor(sapply(df_train_date$date, is_holiday))
 
 oktmo_set <- df_train_date %>% select(oktmo) %>% distinct()
 
-date_list <- as.Date(c("2021-01-25", "2021-02-01", "2021-02-07", "2021-02-15"))
-start_predict <- last(date_list)
+# date_list <- as.Date(c("2021-01-25", "2021-02-01", "2021-02-07", "2021-02-15"))
+# start_predict <- last(date_list)
+start_predict <- start_date
 finish_predict <- as.Date("2021-06-30")
 
 start_date_int <- as.integer(difftime(start_predict, min_date, units = "days"))
@@ -121,9 +122,13 @@ for (cur_oktmo in oktmo_set$oktmo){
     df_lm$isw5 = as.integer(df_lm$week == 5)
     df_lm$isw6 = as.integer(df_lm$week == 6)
     
-    
     if (nrow(df_lm) > 0){
 
+      df_lm_part <- df_lm %>% 
+        arrange(df_lm[[col_name]])
+
+      # df_lm_part <- df_lm_part[3:(nrow(df_lm_part) - 2), ]
+      
       test_f <- function(x){
         return(sum(abs(df_lm_part[[col_name]] - (x[1] + df_lm_part$date_int * x[2] +
                                                    df_lm_part$isw1 * x[3] +
@@ -131,42 +136,15 @@ for (cur_oktmo in oktmo_set$oktmo){
                                                    df_lm_part$isw3 * x[5] +
                                                    df_lm_part$isw4 * x[6] +
                                                    df_lm_part$isw5 * x[7] +
-                                                   df_lm_part$isw6 * x[8] +
-                                              as.integer(df_lm_part$is_holiday == "TRUE") * x[9])))/nrow(df_lm_part))}
-      
-      
-      opt_f <- 2000000000
-      opt_date <- NA
-      
-      # print(col_name)
-      for (cur_date_from in date_list){
-        df_lm_part <- df_lm %>% filter(date >= cur_date_from)
-        fit <- glm(as.formula(paste(col_name, " ~ date_int + week + is_holiday")),
-                   data = df_lm_part)
-        # cur_f <- test_f(fit$coefficients)
-        cur_f <- summary(fit)$coefficients[2, "Pr(>|t|)"]
-        if (is.na(cur_f))
-        {
-          opt_date <- cur_date_from
-          break
-        }
-        if (cur_f < opt_f)
-        {
-          opt_date <- cur_date_from
-          opt_f <- cur_f
-        }
-      }
-      
-      opt_date <- as.Date(opt_date, origin = "1970-01-01")
-      print(opt_date)
-      
+                                                   df_lm_part$isw6 * x[8])))/nrow(df_lm_part))}
 
-      df_lm_part <- df_lm %>% filter(date >= opt_date)
-      fit <- glm(as.formula(paste(col_name, " ~ date_int + week + is_holiday")),
+
+      fit <- glm(as.formula(paste(col_name, " ~ date_int + week")),
                  data = df_lm_part)
+      summary(fit)
       
-      
-      res <- optim_nm(test_f, k = 9, start = fit$coefficients)
+      test_f(fit$coefficients)
+      res <- optim_nm(test_f, k = 8, start = fit$coefficients)
       # res <- optim_sa(test_f,
       #                 start = fit$coefficients,
       #                 lower = fit$coefficients - abs(fit$coefficients) / 2 - 0.1,
@@ -193,8 +171,7 @@ for (cur_oktmo in oktmo_set$oktmo){
           df_predict$isw3 * x[5] +
           df_predict$isw4 * x[6] +
           df_predict$isw5 * x[7] +
-          df_predict$isw6 * x[8] +
-          as.integer(df_predict$is_holiday == "TRUE") * x[9]
+          df_predict$isw6 * x[8]
       }
       else 
       {
@@ -233,7 +210,6 @@ for (cur_oktmo in oktmo_set$oktmo){
       df_predict <- df_predict %>% mutate(!!col_name := 0)
     df_predict_reg <- cbind(df_predict_reg, 
                             df_predict %>% 
-                              filter(date >= date_list[length(date_list)]) %>% 
                               select(!!col_name))
   }
   
