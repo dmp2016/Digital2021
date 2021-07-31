@@ -127,7 +127,7 @@ for (cur_oktmo in oktmo_set$oktmo){
       df_lm_part <- df_lm %>% 
         arrange(df_lm[[col_name]])
 
-      # df_lm_part <- df_lm_part[3:(nrow(df_lm_part) - 2), ]
+      df_lm_part <- df_lm_part[3:(nrow(df_lm_part) - 3), ]
       
       test_f <- function(x){
         return(sum(abs(df_lm_part[[col_name]] - (x[1] + df_lm_part$date_int * x[2] +
@@ -267,9 +267,9 @@ write_csv(df_res, "1/mytest_ord.csv")
 ######################################################
 cur_oktmo <- "71000000000"
 cur_oktmo <- "26000000000"
-# cur_oktmo <- "64000000000"
+cur_oktmo <- "64000000000"
 # cur_oktmo <- "75000000000"
-col_name <- "bread_value"
+col_name <- "rice"
 ggplot(data = df_train_date %>% 
          filter(oktmo == cur_oktmo)) +
   geom_point(aes(x = date_int, y = .data[[col_name]]), col = "blue") +
