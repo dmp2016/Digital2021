@@ -127,7 +127,7 @@ for (cur_oktmo in oktmo_set$oktmo){
       df_lm_part <- df_lm %>% 
         arrange(df_lm[[col_name]])
 
-      df_lm_part <- df_lm_part[3:(nrow(df_lm_part) - 3), ]
+      df_lm_part <- df_lm_part[4:(nrow(df_lm_part) - 4), ]
       
       test_f <- function(x){
         return(sum(abs(df_lm_part[[col_name]] - (x[1] + df_lm_part$date_int * x[2] +
