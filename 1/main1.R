@@ -6,70 +6,7 @@ library(lubridate)
 # install.packages("optimization")
 # install.packages('Rcpp')
 
-
-C_HOLIDAY <- as.Date(c(
-  "2021-01-01",
-  "2021-01-02", 
-  "2021-01-03", 
-  "2021-01-04", 
-  "2021-01-05", 
-  "2021-01-06",
-  "2021-01-07", 
-  "2021-01-08", 
-  "2021-01-09", 
-  "2021-01-10", 
-  "2021-02-22", 
-  "2021-02-23",
-  "2021-03-08",
-  "2021-05-03",
-  "2021-05-10",
-  "2021-06-14"))
-
-C_NOT_HOLIDAY <- as.Date(c("2021-02-20"))
-
-
-is_holiday <- function(x){
-  if (x %in% C_HOLIDAY)
-    return(T)
-  if (x %in% C_NOT_HOLIDAY)
-    return(F)
-  if (wday(x) %in% c(1, 7))
-    return(T)
-  return(F)
-}
-
-##############################################################
-# Чтение и подготовка данных
-##############################################################
-
-df_train <- read_csv2("1/train.csv", 
-                      col_types = cols(.default = col_character()))
-
-
-numeric_cols <- colnames(df_train)[5:length(colnames(df_train))]
-predict_cols <- colnames(df_train)[5:length(colnames(df_train))]
-
-for (cl in numeric_cols){
-  print(cl)
-  df_train[[cl]] <- gsub(",", ".", df_train[[cl]], fixed = T)
-  df_train[[cl]] <- gsub(" ", "", df_train[[cl]], fixed = T)
-  df_train[[cl]] <- as.double(df_train[[cl]])
-}
-
-
-
-typeof(df_train$bread)
-
-df_train$date <- as.Date(paste(substr(df_train$date, 7, 10), 
-                         "-", 
-                         substr(df_train$date, 4, 5),
-                         "-",
-                         substr(df_train$date, 1, 2),
-                         sep = ""))
-
-##############################################################
-# Исходный датасет прочитан и подготовлен..
-##############################################################
+source("1/prepare_data.r", encoding = "UTF-8")
 
 
 start_date <- as.Date("2021-02-01")
@@ -85,6 +22,16 @@ df_train_date$date_int <- as.integer(difftime(df_train_date$date,
 df_train_date$week <- factor(df_train_date$date_int %% 7)
 df_train_date$is_holiday <- factor(sapply(df_train_date$date, is_holiday))
 
+df_2020_fit <- df_2020 %>% 
+  select(date, oktmo, all_of(predict_cols)) %>% 
+  rename(setNames(predict_cols, paste0(predict_cols, ".2020")))
+
+for (cur_col in paste0(predict_cols, ".2020")){
+  df_2020_fit[[cur_col]] <- smooth(x = df_2020_fit[[cur_col]])
+}
+
+df_train_date <- merge(df_train_date, df_2020_fit, by = c("oktmo", "date"))
+
 # df_train_date %>% select(date, is_holiday) %>% distinct()
 
 
@@ -99,9 +46,10 @@ start_date_int <- as.integer(difftime(start_predict, min_date, units = "days"))
 finish_date_int <- as.integer(difftime(finish_predict, min_date, units = "days"))
 predict_dates_int = start_date_int:finish_date_int
 
-# cur_oktmo <- oktmo_set$oktmo[1]
+
+cur_oktmo <- "30000000000"
 # 
-# col_name <-  predict_cols[1]
+col_name <-  "mutton"
 
 res_predict <- NULL
 
@@ -112,22 +60,30 @@ for (cur_oktmo in oktmo_set$oktmo){
   df_predict_reg <- tibble(oktmo = cur_oktmo,
                            date_int = predict_dates_int)
 
+  # df_lm <- df_train_date_reg %>% filter(.[[col_name]] > 0)
+
+  df_lm <- df_train_date_reg
+  df_lm$isw1 = as.integer(df_lm$week == 1)
+  df_lm$isw2 = as.integer(df_lm$week == 2)
+  df_lm$isw3 = as.integer(df_lm$week == 3)
+  df_lm$isw4 = as.integer(df_lm$week == 4)
+  df_lm$isw5 = as.integer(df_lm$week == 5)
+  df_lm$isw6 = as.integer(df_lm$week == 6)
+  
+
+  df_2020_fit_reg <- df_2020_fit %>% filter(oktmo == cur_oktmo)
+  
   for (col_name in predict_cols){
-    # df_lm <- df_train_date_reg %>% filter(.[[col_name]] > 0)
-    df_lm <- df_train_date_reg
-    df_lm$isw1 = as.integer(df_lm$week == 1)
-    df_lm$isw2 = as.integer(df_lm$week == 2)
-    df_lm$isw3 = as.integer(df_lm$week == 3)
-    df_lm$isw4 = as.integer(df_lm$week == 4)
-    df_lm$isw5 = as.integer(df_lm$week == 5)
-    df_lm$isw6 = as.integer(df_lm$week == 6)
+    # print(col_name)
+    col_name2020 <- paste0(col_name, ".2020")
+
+    df_lm_part <- df_lm %>% 
+      arrange(df_lm[[col_name]])
     
-    if (nrow(df_lm) > 0){
-
-      df_lm_part <- df_lm %>% 
-        arrange(df_lm[[col_name]])
-
-      df_lm_part <- df_lm_part[4:(nrow(df_lm_part) - 4), ]
+    df_lm_part <- df_lm_part[4:(nrow(df_lm_part) - 4), ]
+    
+    if (nrow(df_lm_part) > 0 & sum(df_lm_part[[col_name]]) != 0)
+    {
       
       test_f <- function(x){
         return(sum(abs(df_lm_part[[col_name]] - (x[1] + df_lm_part$date_int * x[2] +
@@ -136,15 +92,18 @@ for (cur_oktmo in oktmo_set$oktmo){
                                                    df_lm_part$isw3 * x[5] +
                                                    df_lm_part$isw4 * x[6] +
                                                    df_lm_part$isw5 * x[7] +
-                                                   df_lm_part$isw6 * x[8])))/nrow(df_lm_part))}
+                                                   df_lm_part$isw6 * x[8] +
+                                                   df_lm_part[[col_name2020]] * x[9])))/nrow(df_lm_part))}
 
 
-      fit <- glm(as.formula(paste(col_name, " ~ date_int + week")),
+      fit <- glm(as.formula(paste(col_name, " ~ date_int + week + ", col_name2020)),
                  data = df_lm_part)
-      summary(fit)
       
-      test_f(fit$coefficients)
-      res <- optim_nm(test_f, k = 8, start = fit$coefficients)
+      fit$coefficients[is.na(fit$coefficients)] <- 0
+      # summary(fit)
+      
+      # test_f(fit$coefficients)
+      res <- optim_nm(test_f, k = 9, start = fit$coefficients)
       # res <- optim_sa(test_f,
       #                 start = fit$coefficients,
       #                 lower = fit$coefficients - abs(fit$coefficients) / 2 - 0.1,
@@ -160,7 +119,10 @@ for (cur_oktmo in oktmo_set$oktmo){
                            isw4 = as.integer(week == 4),
                            isw5 = as.integer(week == 5),
                            isw6 = as.integer(week == 6))
-      df_predict$is_holiday <- factor(sapply(df_predict$date, is_holiday))
+      df_predict <- merge(df_predict, df_2020_fit_reg %>% 
+                            select(date, !!col_name2020), 
+                          by = "date")
+      # df_predict$is_holiday <- factor(sapply(df_predict$date, is_holiday))
       
       if (test_f(res$par) < test_f(fit$coefficients))
       {
@@ -171,7 +133,8 @@ for (cur_oktmo in oktmo_set$oktmo){
           df_predict$isw3 * x[5] +
           df_predict$isw4 * x[6] +
           df_predict$isw5 * x[7] +
-          df_predict$isw6 * x[8]
+          df_predict$isw6 * x[8] +
+          df_predict[[col_name2020]] * x[9]
       }
       else 
       {
@@ -180,34 +143,12 @@ for (cur_oktmo in oktmo_set$oktmo){
        # print(col_name)
       }
       df_predict[[col_name]] <- ifelse(df_predict[[col_name]] < 0, 0, df_predict[[col_name]])
-      
-      ###
-      # df_train_date_reg$tmp_predict <- predict(fit, df_train_date_reg)
-      # 
-      # opt_f <- function(x){
-      #   sum(abs(df_train_date_reg$tmp_predict + x[1] * 
-      #             sin(2 * pi * (df_train_date_reg$date_int + x[3]) / x[2])
-      #           - df_train_date_reg[[col_name]]))}
-      
-      
-      # amp <- mean(abs(df_train_date_reg[[col_name]] - df_train_date_reg$tmp_predict)) / 2
-      # 
-      # if (amp > 1){
-      #   res <- optim_sa(opt_f, 
-      #                   start = c(amp, 45, 45),
-      #                   lower = c(0, 1, 0),
-      #                   upper = c(2 * amp, 90, 90))
-      #   ###
-      #   if (res$function_value < opt_f(c(0, 1, 1))){
-      #     print(c(res$function_value, opt_f(c(0, 1, 1))))
-      #     df_predict[[col_name]] <- df_predict[[col_name]] + res$par[1] * 
-      #       sin(2 * pi * (df_predict$date_int  + res$par[3]) / res$par[2])
-      #   }
-      # }
-      
     }
     else
+    {
+      print(0)
       df_predict <- df_predict %>% mutate(!!col_name := 0)
+    }
     df_predict_reg <- cbind(df_predict_reg, 
                             df_predict %>% 
                               select(!!col_name))
@@ -268,8 +209,8 @@ write_csv(df_res, "1/mytest_ord.csv")
 cur_oktmo <- "71000000000"
 cur_oktmo <- "26000000000"
 cur_oktmo <- "64000000000"
-# cur_oktmo <- "75000000000"
-col_name <- "rice"
+cur_oktmo <- "75000000000"
+col_name <- "dt_value"
 ggplot(data = df_train_date %>% 
          filter(oktmo == cur_oktmo)) +
   geom_point(aes(x = date_int, y = .data[[col_name]]), col = "blue") +
