@@ -22,6 +22,15 @@ df_train_date$date_int <- as.integer(difftime(df_train_date$date,
 df_train_date$week <- factor(df_train_date$date_int %% 7)
 df_train_date$is_holiday <- factor(sapply(df_train_date$date, is_holiday))
 
+days_amount <- difftime("2021-06-30", "2021-02-01", units = "days")
+
+df_2020 <- df_train %>% 
+  filter(between(date, 
+                 as.Date("2020-02-01") + 2, 
+                 as.Date("2020-02-01") + 2 + days_amount)) %>% 
+  mutate(date = date + 366 - 2, year = 2020)
+
+
 df_2020_fit <- df_2020 %>% 
   select(date, oktmo, all_of(predict_cols)) %>% 
   rename(setNames(predict_cols, paste0(predict_cols, ".2020")))
