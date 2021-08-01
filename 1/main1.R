@@ -33,45 +33,36 @@ df_2020 <- df_train %>%
 
 df_2020_fit <- df_2020 %>% 
   select(date, oktmo, all_of(predict_cols)) %>% 
-  rename(setNames(predict_cols, paste0(predict_cols, ".2020")))
+  rename(setNames(predict_cols, paste0(predict_cols, ".2020"))) %>% 
+  mutate(date_int_1 = as.integer(difftime(df_2020_fit$date, 
+                                        min_date, 
+                                        units = "days")))
 
+oktmo_set <- df_train_date %>% select(oktmo) %>% distinct()
 
-# for (cur_col in paste0(predict_cols, ".2020")){
-#   df_2020_fit[[cur_col]] <- smooth(x = df_2020_fit[[cur_col]])
+# for (cur_oktmo in oktmo_set$oktmo) {
+#   df_2020_fit_reg <- df_2020_fit %>% filter(oktmo == cur_oktmo)
+#   for (cur_col in paste0(predict_cols, ".2020")){
+#     fit_smooth <- lm(paste(cur_col, " ~ date_int_1"), df_2020_fit_reg)
+#     df_2020_fit[[cur_col]][df_2020_fit$oktmo == cur_oktmo] <- 
+#       predict(fit_smooth, df_2020_fit[df_2020_fit$oktmo == cur_oktmo, ])
+#     # df_2020_fit[[cur_col]] <- smooth(x = df_2020_fit[[cur_col]])
+#   }
 # }
 
+df_2020_fit$date_int_1 <- NULL
 
-df_2020_21 <- df_train %>% 
-  filter(between(date, 
-                 as.Date("2020-02-01") + 2 + 21, 
-                 as.Date("2020-02-01") + 2 + days_amount + 21)) %>% 
-  mutate(date = date + 366 - 2 - 21, year = 2020)
-
-
-##########!!!!!!!!!!!!!!!!!!
-
-df_2019 <- df_train %>% 
-  filter(between(date, 
-                 as.Date("2019-02-01") + 3, 
-                 as.Date("2019-02-01") + 3 + days_amount)) %>% 
-  mutate(date = date + 365 - 3 + 366, year = 2019)
-
-
-df_2020_21_fit <- df_2020_19 %>% 
-  select(date, oktmo, all_of(predict_cols)) %>% 
-  rename(setNames(predict_cols, paste0(predict_cols, ".2020_21")))
-
-
-df_2020_fit <- merge(df_2020_fit, df_2020_21_fit, by = c("oktmo", "date"))
 df_train_date <- merge(df_train_date, df_2020_fit, by = c("oktmo", "date"))
-
-head(df_2020_fit %>% select(!!col_name2020, !!col_name2020_21), 50)
 
 
 # df_train_date %>% select(date, is_holiday) %>% distinct()
 
 
-oktmo_set <- df_train_date %>% select(oktmo) %>% distinct()
+
+qplot(data = df_2020_fit %>% filter(oktmo == "30000000000"), 
+      x = date, 
+      y = pasta.2020)
+
 
 # date_list <- as.Date(c("2021-01-25", "2021-02-01", "2021-02-07", "2021-02-15"))
 # start_predict <- last(date_list)
@@ -85,9 +76,10 @@ predict_dates_int = start_date_int:finish_date_int
 
 cur_oktmo <- "30000000000"
 # 
-col_name <-  "bread"
+col_name <-  "mutton"
 
 res_predict <- NULL
+
 
 for (cur_oktmo in oktmo_set$oktmo){
   print(cur_oktmo)
@@ -95,9 +87,9 @@ for (cur_oktmo in oktmo_set$oktmo){
   
   df_predict_reg <- tibble(oktmo = cur_oktmo,
                            date_int = predict_dates_int)
-
+  
   # df_lm <- df_train_date_reg %>% filter(.[[col_name]] > 0)
-
+  
   df_lm <- df_train_date_reg
   df_lm$isw1 = as.integer(df_lm$week == 1)
   df_lm$isw2 = as.integer(df_lm$week == 2)
@@ -106,14 +98,13 @@ for (cur_oktmo in oktmo_set$oktmo){
   df_lm$isw5 = as.integer(df_lm$week == 5)
   df_lm$isw6 = as.integer(df_lm$week == 6)
   
-
+  
   df_2020_fit_reg <- df_2020_fit %>% filter(oktmo == cur_oktmo)
   
   for (col_name in predict_cols){
     # print(col_name)
     col_name2020 <- paste0(col_name, ".2020")
-    col_name2020_21 <- paste0(col_name, ".2020_21")
-
+    
     df_lm_part <- df_lm %>% 
       arrange(df_lm[[col_name]])
     
@@ -123,30 +114,24 @@ for (cur_oktmo in oktmo_set$oktmo){
     {
       
       test_f <- function(x){
-        return(sum(abs(df_lm_part[[col_name]] - 
-                         (x[1] + df_lm_part$date_int * x[2] +
-                            df_lm_part$isw1 * x[3] +
-                            df_lm_part$isw2 * x[4] +
-                            df_lm_part$isw3 * x[5] +
-                            df_lm_part$isw4 * x[6] +
-                            df_lm_part$isw5 * x[7] +
-                            df_lm_part$isw6 * x[8] +
-                            df_lm_part[[col_name2020]] * x[9] +
-                            df_lm_part[[col_name2020_21]] * x[10])))/nrow(df_lm_part))}
-
-
-      fit <- glm(as.formula(paste(col_name, 
-                                  " ~ date_int + week + ", 
-                                  col_name2020, 
-                                  " + ", 
-                                  col_name2020_21)),
+        return(sum(abs(df_lm_part[[col_name]] - (x[1] + df_lm_part$date_int * x[2] +
+                                                   df_lm_part$isw1 * x[3] +
+                                                   df_lm_part$isw2 * x[4] +
+                                                   df_lm_part$isw3 * x[5] +
+                                                   df_lm_part$isw4 * x[6] +
+                                                   df_lm_part$isw5 * x[7] +
+                                                   df_lm_part$isw6 * x[8] +
+                                                   df_lm_part[[col_name2020]] * x[9])))/nrow(df_lm_part))}
+      
+      
+      fit <- glm(as.formula(paste(col_name, " ~ date_int + week + ", col_name2020)),
                  data = df_lm_part)
-      # summary(fit)
       
       fit$coefficients[is.na(fit$coefficients)] <- 0
+      # summary(fit)
       
       # test_f(fit$coefficients)
-      res <- optim_nm(test_f, k = 10, start = fit$coefficients)
+      res <- optim_nm(test_f, k = 9, start = fit$coefficients)
       # res <- optim_sa(test_f,
       #                 start = fit$coefficients,
       #                 lower = fit$coefficients - abs(fit$coefficients) / 2 - 0.1,
@@ -163,7 +148,7 @@ for (cur_oktmo in oktmo_set$oktmo){
                            isw5 = as.integer(week == 5),
                            isw6 = as.integer(week == 6))
       df_predict <- merge(df_predict, df_2020_fit_reg %>% 
-                            select(date, !!col_name2020, !!col_name2020_21), 
+                            select(date, !!col_name2020), 
                           by = "date")
       # df_predict$is_holiday <- factor(sapply(df_predict$date, is_holiday))
       
@@ -177,14 +162,13 @@ for (cur_oktmo in oktmo_set$oktmo){
           df_predict$isw4 * x[6] +
           df_predict$isw5 * x[7] +
           df_predict$isw6 * x[8] +
-          df_predict[[col_name2020]] * x[9] +
-          df_predict[[col_name2020_21]] * x[10]
+          df_predict[[col_name2020]] * x[9]
       }
       else 
       {
-       df_predict <- df_predict %>% mutate(!!col_name := predict(fit, df_predict))
-       print("LM is better")
-       # print(col_name)
+        df_predict <- df_predict %>% mutate(!!col_name := predict(fit, df_predict))
+        print("LM is better")
+        # print(col_name)
       }
       df_predict[[col_name]] <- ifelse(df_predict[[col_name]] < 0, 0, df_predict[[col_name]])
     }
@@ -245,7 +229,6 @@ for (ind in 1:nrow(df_test)){
 
 
 write_csv(df_res, "1/mytest_ord.csv")
-
 
 ######################################################
 # Test prediction on graphic
@@ -316,9 +299,9 @@ test_f <- function(x){
 
 
 res <- optim_sa(test_f,
-         start = fit$coefficients,
-         lower = fit$coefficients - abs(fit$coefficients) / 2 - 0.1,
-         upper = fit$coefficients + abs(fit$coefficients) / 2 + 0.1)
+                start = fit$coefficients,
+                lower = fit$coefficients - abs(fit$coefficients) / 2 - 0.1,
+                upper = fit$coefficients + abs(fit$coefficients) / 2 + 0.1)
 
 res <- optim_nm(test_f, start = c(fit$coefficients), k = 9, exit = 2000)
 
@@ -358,9 +341,9 @@ df_lm <- df_train_date %>% filter(oktmo == cur_oktmo & date_int <= 80) %>% filte
 df_predict <- tibble(date_int = predict_dates_int, week = factor(predict_dates_int %% 7))
 
 fit <- lm(as.formula(paste(col_name, " ~ date_int")), 
-         data = df_lm)
+          data = df_lm)
 df_predict <- df_predict %>% mutate(!!col_name := predict(fit, df_predict))
-  
+
 
 
 #######################################################################
@@ -457,10 +440,10 @@ opt_f(c(0, 1, 1))
 amp <- mean(abs(df_train_reg[[col_name]] - df_train_reg$pred)) / 2
 
 res <- optim_sa(opt_f, 
-         start = c(amp, 45, 45),
-         lower = c(0, 1, 0),
-         upper = c(2 * amp, 90, 90)
-         )
+                start = c(amp, 45, 45),
+                lower = c(0, 1, 0),
+                upper = c(2 * amp, 90, 90)
+)
 
 
 res$par
