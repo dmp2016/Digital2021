@@ -35,11 +35,38 @@ df_2020_fit <- df_2020 %>%
   select(date, oktmo, all_of(predict_cols)) %>% 
   rename(setNames(predict_cols, paste0(predict_cols, ".2020")))
 
-for (cur_col in paste0(predict_cols, ".2020")){
-  df_2020_fit[[cur_col]] <- smooth(x = df_2020_fit[[cur_col]])
-}
 
+# for (cur_col in paste0(predict_cols, ".2020")){
+#   df_2020_fit[[cur_col]] <- smooth(x = df_2020_fit[[cur_col]])
+# }
+
+
+df_2020_21 <- df_train %>% 
+  filter(between(date, 
+                 as.Date("2020-02-01") + 2 + 21, 
+                 as.Date("2020-02-01") + 2 + days_amount + 21)) %>% 
+  mutate(date = date + 366 - 2 - 21, year = 2020)
+
+
+##########!!!!!!!!!!!!!!!!!!
+
+df_2019 <- df_train %>% 
+  filter(between(date, 
+                 as.Date("2019-02-01") + 3, 
+                 as.Date("2019-02-01") + 3 + days_amount)) %>% 
+  mutate(date = date + 365 - 3 + 366, year = 2019)
+
+
+df_2020_21_fit <- df_2020_19 %>% 
+  select(date, oktmo, all_of(predict_cols)) %>% 
+  rename(setNames(predict_cols, paste0(predict_cols, ".2020_21")))
+
+
+df_2020_fit <- merge(df_2020_fit, df_2020_21_fit, by = c("oktmo", "date"))
 df_train_date <- merge(df_train_date, df_2020_fit, by = c("oktmo", "date"))
+
+head(df_2020_fit %>% select(!!col_name2020, !!col_name2020_21), 50)
+
 
 # df_train_date %>% select(date, is_holiday) %>% distinct()
 
@@ -58,7 +85,7 @@ predict_dates_int = start_date_int:finish_date_int
 
 cur_oktmo <- "30000000000"
 # 
-col_name <-  "mutton"
+col_name <-  "bread"
 
 res_predict <- NULL
 
@@ -85,6 +112,7 @@ for (cur_oktmo in oktmo_set$oktmo){
   for (col_name in predict_cols){
     # print(col_name)
     col_name2020 <- paste0(col_name, ".2020")
+    col_name2020_21 <- paste0(col_name, ".2020_21")
 
     df_lm_part <- df_lm %>% 
       arrange(df_lm[[col_name]])
@@ -95,24 +123,30 @@ for (cur_oktmo in oktmo_set$oktmo){
     {
       
       test_f <- function(x){
-        return(sum(abs(df_lm_part[[col_name]] - (x[1] + df_lm_part$date_int * x[2] +
-                                                   df_lm_part$isw1 * x[3] +
-                                                   df_lm_part$isw2 * x[4] +
-                                                   df_lm_part$isw3 * x[5] +
-                                                   df_lm_part$isw4 * x[6] +
-                                                   df_lm_part$isw5 * x[7] +
-                                                   df_lm_part$isw6 * x[8] +
-                                                   df_lm_part[[col_name2020]] * x[9])))/nrow(df_lm_part))}
+        return(sum(abs(df_lm_part[[col_name]] - 
+                         (x[1] + df_lm_part$date_int * x[2] +
+                            df_lm_part$isw1 * x[3] +
+                            df_lm_part$isw2 * x[4] +
+                            df_lm_part$isw3 * x[5] +
+                            df_lm_part$isw4 * x[6] +
+                            df_lm_part$isw5 * x[7] +
+                            df_lm_part$isw6 * x[8] +
+                            df_lm_part[[col_name2020]] * x[9] +
+                            df_lm_part[[col_name2020_21]] * x[10])))/nrow(df_lm_part))}
 
 
-      fit <- glm(as.formula(paste(col_name, " ~ date_int + week + ", col_name2020)),
+      fit <- glm(as.formula(paste(col_name, 
+                                  " ~ date_int + week + ", 
+                                  col_name2020, 
+                                  " + ", 
+                                  col_name2020_21)),
                  data = df_lm_part)
-      
-      fit$coefficients[is.na(fit$coefficients)] <- 0
       # summary(fit)
       
+      fit$coefficients[is.na(fit$coefficients)] <- 0
+      
       # test_f(fit$coefficients)
-      res <- optim_nm(test_f, k = 9, start = fit$coefficients)
+      res <- optim_nm(test_f, k = 10, start = fit$coefficients)
       # res <- optim_sa(test_f,
       #                 start = fit$coefficients,
       #                 lower = fit$coefficients - abs(fit$coefficients) / 2 - 0.1,
@@ -129,7 +163,7 @@ for (cur_oktmo in oktmo_set$oktmo){
                            isw5 = as.integer(week == 5),
                            isw6 = as.integer(week == 6))
       df_predict <- merge(df_predict, df_2020_fit_reg %>% 
-                            select(date, !!col_name2020), 
+                            select(date, !!col_name2020, !!col_name2020_21), 
                           by = "date")
       # df_predict$is_holiday <- factor(sapply(df_predict$date, is_holiday))
       
@@ -143,7 +177,8 @@ for (cur_oktmo in oktmo_set$oktmo){
           df_predict$isw4 * x[6] +
           df_predict$isw5 * x[7] +
           df_predict$isw6 * x[8] +
-          df_predict[[col_name2020]] * x[9]
+          df_predict[[col_name2020]] * x[9] +
+          df_predict[[col_name2020_21]] * x[10]
       }
       else 
       {
