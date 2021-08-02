@@ -34,34 +34,37 @@ df_2020 <- df_train %>%
 df_2020_fit <- df_2020 %>% 
   select(date, oktmo, all_of(predict_cols)) %>% 
   rename(setNames(predict_cols, paste0(predict_cols, ".2020"))) %>% 
-  mutate(date_int_1 = as.integer(difftime(df_2020_fit$date, 
+  mutate(date_int_1 = as.integer(difftime(date, 
                                         min_date, 
-                                        units = "days")))
+                                        units = "days"))) %>% 
+  arrange(date_int_1)
+
 
 oktmo_set <- df_train_date %>% select(oktmo) %>% distinct()
 
 # for (cur_oktmo in oktmo_set$oktmo) {
-#   df_2020_fit_reg <- df_2020_fit %>% filter(oktmo == cur_oktmo)
 #   for (cur_col in paste0(predict_cols, ".2020")){
-#     fit_smooth <- lm(paste(cur_col, " ~ date_int_1"), df_2020_fit_reg)
-#     df_2020_fit[[cur_col]][df_2020_fit$oktmo == cur_oktmo] <- 
-#       predict(fit_smooth, df_2020_fit[df_2020_fit$oktmo == cur_oktmo, ])
-#     # df_2020_fit[[cur_col]] <- smooth(x = df_2020_fit[[cur_col]])
+#     df_2020_fit[[cur_col]][df_2020_fit$oktmo == cur_oktmo] <-
+#       smooth(x = df_2020_fit[[cur_col]][df_2020_fit$oktmo == cur_oktmo])
 #   }
 # }
 
 df_2020_fit$date_int_1 <- NULL
 
+
+# ggplot(data = df_2020_fit %>% filter(oktmo == "30000000000")) +
+#   geom_point(aes(x = date, y = vegetables.2020), col = "red") +
+#   geom_point(data = df_2020_fit_a %>% filter(oktmo == "30000000000"), aes(x = date, y = vegetables), col = "blue")
+#        
+# qplot(data = df_2020_fit %>% filter(oktmo == "30000000000"), 
+#       x = date, 
+#       y = pasta.2020)
+
+
 df_train_date <- merge(df_train_date, df_2020_fit, by = c("oktmo", "date"))
 
 
 # df_train_date %>% select(date, is_holiday) %>% distinct()
-
-
-
-qplot(data = df_2020_fit %>% filter(oktmo == "30000000000"), 
-      x = date, 
-      y = pasta.2020)
 
 
 # date_list <- as.Date(c("2021-01-25", "2021-02-01", "2021-02-07", "2021-02-15"))
@@ -108,7 +111,7 @@ for (cur_oktmo in oktmo_set$oktmo){
     df_lm_part <- df_lm %>% 
       arrange(df_lm[[col_name]])
     
-    df_lm_part <- df_lm_part[4:(nrow(df_lm_part) - 4), ]
+    df_lm_part <- df_lm_part[7:(nrow(df_lm_part) - 7), ]
     
     if (nrow(df_lm_part) > 0 & sum(df_lm_part[[col_name]]) != 0)
     {
@@ -237,7 +240,7 @@ cur_oktmo <- "71000000000"
 cur_oktmo <- "26000000000"
 cur_oktmo <- "64000000000"
 cur_oktmo <- "75000000000"
-col_name <- "dt_value"
+col_name <- "bread_value"
 ggplot(data = df_train_date %>% 
          filter(oktmo == cur_oktmo)) +
   geom_point(aes(x = date_int, y = .data[[col_name]]), col = "blue") +
