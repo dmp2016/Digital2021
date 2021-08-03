@@ -9,7 +9,7 @@ library(lubridate)
 source("1/prepare_data.r", encoding = "UTF-8")
 
 
-start_date <- as.Date("2021-02-01") - 7 * 4 * 3
+start_date <- as.Date("2021-02-01")
 
 df_train_date <- df_train %>% filter(date >= start_date)
 
@@ -26,18 +26,17 @@ days_amount <- difftime("2021-06-30", "2021-02-01", units = "days")
 
 df_2020 <- df_train %>% 
   filter(between(date, 
-                 as.Date("2020-02-01") + 2 - 7 * 4 * 3, 
+                 as.Date("2020-02-01") + 2, 
                  as.Date("2020-02-01") + 2 + days_amount)) %>% 
   mutate(date = date + 366 - 2, year = 2020)
 
-min(df_2020$date)
 
 df_2020_fit <- df_2020 %>% 
   select(date, oktmo, all_of(predict_cols)) %>% 
   rename(setNames(predict_cols, paste0(predict_cols, ".2020"))) %>% 
   mutate(date_int_1 = as.integer(difftime(date, 
-                                        min_date, 
-                                        units = "days"))) %>% 
+                                          min_date, 
+                                          units = "days"))) %>% 
   arrange(date_int_1)
 
 
@@ -80,7 +79,7 @@ predict_dates_int = start_date_int:finish_date_int
 
 cur_oktmo <- "30000000000"
 # 
-col_name <-  "pork"
+col_name <-  "mutton"
 
 res_predict <- NULL
 
@@ -114,30 +113,28 @@ for (cur_oktmo in oktmo_set$oktmo){
     
     df_lm_part <- df_lm_part[7:(nrow(df_lm_part) - 7), ]
     
-    
     if (nrow(df_lm_part) > 0 & sum(df_lm_part[[col_name]]) != 0)
     {
       
       test_f <- function(x){
-        return(sum(abs(df_lm_part[[col_name]] - (x[1] + 
-                                                   # df_lm_part$date_int * x[2] +
-                                                   # df_lm_part$isw1 * x[3] +
-                                                   # df_lm_part$isw2 * x[4] +
-                                                   # df_lm_part$isw3 * x[5] +
-                                                   # df_lm_part$isw4 * x[6] +
-                                                   # df_lm_part$isw5 * x[7] +
-                                                   # df_lm_part$isw6 * x[8] +
-                                                   df_lm_part[[col_name2020]] * x[2])))/nrow(df_lm_part))}
+        return(sum(abs(df_lm_part[[col_name]] - (x[1] + df_lm_part$date_int * x[2] +
+                                                   df_lm_part$isw1 * x[3] +
+                                                   df_lm_part$isw2 * x[4] +
+                                                   df_lm_part$isw3 * x[5] +
+                                                   df_lm_part$isw4 * x[6] +
+                                                   df_lm_part$isw5 * x[7] +
+                                                   df_lm_part$isw6 * x[8] +
+                                                   df_lm_part[[col_name2020]] * x[9])))/nrow(df_lm_part))}
       
       
-      fit <- glm(as.formula(paste(col_name, " ~ ", col_name2020)),
+      fit <- glm(as.formula(paste(col_name, " ~ date_int + week + ", col_name2020)),
                  data = df_lm_part)
       
       fit$coefficients[is.na(fit$coefficients)] <- 0
       # summary(fit)
       
       # test_f(fit$coefficients)
-      res <- optim_nm(test_f, k = 2, start = fit$coefficients)
+      # res <- optim_nm(test_f, k = 9, start = fit$coefficients)
       # res <- optim_sa(test_f,
       #                 start = fit$coefficients,
       #                 lower = fit$coefficients - abs(fit$coefficients) / 2 - 0.1,
@@ -158,18 +155,17 @@ for (cur_oktmo in oktmo_set$oktmo){
                           by = "date")
       # df_predict$is_holiday <- factor(sapply(df_predict$date, is_holiday))
       
-      if (test_f(res$par) < test_f(fit$coefficients))
+      if (F) # test_f(res$par) < test_f(fit$coefficients))
       {
         x <- res$par
-        df_predict[[col_name]] <- x[1] + 
-          # df_predict$date_int * x[2] +
-          # df_predict$isw1 * x[3] +
-          # df_predict$isw2 * x[4] +
-          # df_predict$isw3 * x[5] +
-          # df_predict$isw4 * x[6] +
-          # df_predict$isw5 * x[7] +
-          # df_predict$isw6 * x[8] +
-          df_predict[[col_name2020]] * x[2]
+        df_predict[[col_name]] <- x[1] + df_predict$date_int * x[2] +
+          df_predict$isw1 * x[3] +
+          df_predict$isw2 * x[4] +
+          df_predict$isw3 * x[5] +
+          df_predict$isw4 * x[6] +
+          df_predict$isw5 * x[7] +
+          df_predict$isw6 * x[8] +
+          df_predict[[col_name2020]] * x[9]
       }
       else 
       {
@@ -239,7 +235,6 @@ write_csv(df_res, "1/mytest_ord.csv")
 
 write_csv(res_predict, "1/all_predict.csv")
 
-col
 
 ######################################################
 # Test prediction on graphic
@@ -248,9 +243,7 @@ cur_oktmo <- "71000000000"
 cur_oktmo <- "26000000000"
 cur_oktmo <- "64000000000"
 cur_oktmo <- "75000000000"
-cur_oktmo <- "76000000000"
 col_name <- "bread_value"
-col_name <- "roots"
 ggplot(data = df_train_date %>% 
          filter(oktmo == cur_oktmo)) +
   geom_point(aes(x = date_int, y = .data[[col_name]]), col = "blue") +
@@ -258,11 +251,7 @@ ggplot(data = df_train_date %>%
   geom_smooth(aes(x = date_int, y = .data[[col_name]]), method = "lm") +
   geom_point(data = res_predict %>% 
                filter(oktmo == cur_oktmo), 
-             aes(x = date_int, y = .data[[col_name]]), col = "red") +
-  geom_point(data = res_predict %>% 
-               filter(oktmo == cur_oktmo), 
              aes(x = date_int, y = .data[[col_name]]), col = "red")
-
 
 
 ######################################################
@@ -480,9 +469,6 @@ ggplot(data = df_train_reg %>%
 opt_f(c(amp, 30, 50))
 opt_f(c(0.5, 1.8, 10))
 opt_f(c(0, 6.93, 0))
-
-
-
 
 
 
