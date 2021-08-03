@@ -243,7 +243,8 @@ cur_oktmo <- "71000000000"
 cur_oktmo <- "26000000000"
 cur_oktmo <- "64000000000"
 cur_oktmo <- "75000000000"
-col_name <- "bread_value"
+cur_oktmo <- "24000000000"
+col_name <- "herring_value"
 ggplot(data = df_train_date %>% 
          filter(oktmo == cur_oktmo)) +
   geom_point(aes(x = date_int, y = .data[[col_name]]), col = "blue") +
