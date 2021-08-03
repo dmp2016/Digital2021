@@ -83,6 +83,7 @@ col_name <-  "mutton"
 
 res_predict <- NULL
 
+# prev year only: 0.007461143484185842
 
 for (cur_oktmo in oktmo_set$oktmo){
   print(cur_oktmo)
@@ -111,7 +112,7 @@ for (cur_oktmo in oktmo_set$oktmo){
     df_lm_part <- df_lm %>% 
       arrange(df_lm[[col_name]])
     
-    df_lm_part <- df_lm_part[7:(nrow(df_lm_part) - 7), ]
+    df_lm_part <- df_lm_part[4:(nrow(df_lm_part) - 4), ]
     
     if (nrow(df_lm_part) > 0 & sum(df_lm_part[[col_name]]) != 0)
     {
