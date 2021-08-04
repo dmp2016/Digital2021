@@ -3,8 +3,10 @@ library(scorer)
 library(Rcpp)
 library(optimization)
 library(lubridate)
+library(randomForest)
 # install.packages("optimization")
 # install.packages('Rcpp')
+install.packages("randomForest")
 
 source("1/prepare_data.r", encoding = "UTF-8")
 
@@ -140,11 +142,13 @@ for (cur_oktmo in oktmo_set$oktmo){
                                                    df_lm_part$isw6 * x[8] +
                                                    df_lm_part[[col_name2020]] * x[9])))/nrow(df_lm_part))}
       
-      if (cur_oktmo %in% except_oktmo & col_name == "сucumbers_tomatoes"){
-        # print(paste("except", cur_oktmo, col_name, sum(df_predict[[col_name]] < 60)))
+      if (nrow(df_except %>% filter(e_oktmo == cur_oktmo & e_col_name == col_name)) > 0){
+        print(paste("except", cur_oktmo, col_name))
         # df_predict[[col_name]] <- ifelse(df_predict[[col_name]] < 60, 60, df_predict[[col_name]])
-        fit <- glm(as.formula(paste(col_name, " ~ ", col_name2020)),
-                   data = df_lm_part)
+        # fit <- glm(as.formula(paste(col_name, " ~ ", col_name2020)),
+        #            data = df_lm_part)
+        fit <- randomForest(as.formula(paste(col_name, " ~ ", col_name2020)),
+                            data = df_lm_part, ntree=50)
       }
       else
         fit <- glm(as.formula(paste(col_name, " ~ date_int + week + ", col_name2020)),
