@@ -83,6 +83,15 @@ col_name <-  "mutton"
 
 res_predict <- NULL
 
+except_oktmo <- c("80000000000", 
+                  "86000000000", 
+                  "97000000000",
+                  "1000000000",
+                  "34000000000",
+                  "33000000000",
+                  "24000000000",
+                  "53000000000")
+
 # prev year only: 0.007461143484185842
 
 for (cur_oktmo in oktmo_set$oktmo){
@@ -112,7 +121,7 @@ for (cur_oktmo in oktmo_set$oktmo){
     df_lm_part <- df_lm %>% 
       arrange(df_lm[[col_name]])
     
-    df_lm_part <- df_lm_part[4:(nrow(df_lm_part) - 4), ]
+    df_lm_part <- df_lm_part[7:(nrow(df_lm_part) - 7), ]
     
     if (nrow(df_lm_part) > 0 & sum(df_lm_part[[col_name]]) != 0)
     {
@@ -127,8 +136,14 @@ for (cur_oktmo in oktmo_set$oktmo){
                                                    df_lm_part$isw6 * x[8] +
                                                    df_lm_part[[col_name2020]] * x[9])))/nrow(df_lm_part))}
       
-      
-      fit <- glm(as.formula(paste(col_name, " ~ date_int + week + ", col_name2020)),
+      if (cur_oktmo %in% except_oktmo & col_name == "сucumbers_tomatoes"){
+        # print(paste("except", cur_oktmo, col_name, sum(df_predict[[col_name]] < 60)))
+        # df_predict[[col_name]] <- ifelse(df_predict[[col_name]] < 60, 60, df_predict[[col_name]])
+        fit <- glm(as.formula(paste(col_name, " ~ ", col_name2020)),
+                   data = df_lm_part)
+      }
+      else
+        fit <- glm(as.formula(paste(col_name, " ~ date_int + week + ", col_name2020)),
                  data = df_lm_part)
       
       fit$coefficients[is.na(fit$coefficients)] <- 0
@@ -235,6 +250,8 @@ for (ind in 1:nrow(df_test)){
 write_csv(df_res, "1/mytest_ord.csv")
 
 write_csv(res_predict, "1/all_predict.csv")
+
+sum(colnames(df_test %>% select(-date_format))!= colnames(df_res))
 
 
 ######################################################
