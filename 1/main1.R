@@ -142,20 +142,20 @@ for (cur_oktmo in oktmo_set$oktmo){
                                                    df_lm_part$isw6 * x[8] +
                                                    df_lm_part[[col_name2020]] * x[9])))/nrow(df_lm_part))}
       
-      # if (nrow(df_except %>% filter(e_oktmo == cur_oktmo & e_col_name == col_name)) > 0){
-      #   print(paste("except", cur_oktmo, col_name))
-      #   # df_predict[[col_name]] <- ifelse(df_predict[[col_name]] < 60, 60, df_predict[[col_name]])
-      #   # fit <- glm(as.formula(paste(col_name, " ~ ", col_name2020)),
-      #   #            data = df_lm_part)
-      #   fit <- randomForest(as.formula(paste(col_name, " ~ ", col_name2020)),
-      #                       data = df_lm_part, ntree=50)
-      # }
-      # else
-      #   fit <- glm(as.formula(paste(col_name, " ~ date_int + week + ", col_name2020)),
-      #            data = df_lm_part)
+      if (nrow(df_except %>% filter(e_oktmo == cur_oktmo & e_col_name == col_name)) > 0){
+        print(paste("except", cur_oktmo, col_name))
+        # df_predict[[col_name]] <- ifelse(df_predict[[col_name]] < 60, 60, df_predict[[col_name]])
+        # fit <- glm(as.formula(paste(col_name, " ~ ", col_name2020)),
+        #            data = df_lm_part)
+        fit <- randomForest(as.formula(paste(col_name, " ~ week + ", col_name2020)),
+                            data = df_lm_part, ntree=50)
+      }
+      else
+        fit <- glm(as.formula(paste(col_name, " ~ date_int + week + ", col_name2020)),
+                 data = df_lm_part)
 
-      fit <- randomForest(as.formula(paste(col_name, " ~ ", col_name2020)),
-                          data = df_lm_part, ntree=50)
+      # fit <- randomForest(as.formula(paste(col_name, " ~ ", col_name2020)),
+      #                     data = df_lm_part, ntree=50)
       
       fit$coefficients[is.na(fit$coefficients)] <- 0
       # summary(fit)
@@ -260,7 +260,7 @@ for (ind in 1:nrow(df_test)){
 
 write_csv(df_res, "1/mytest_ord.csv")
 
-write_csv(res_predict, "1/all_predict.csv")
+# write_csv(res_predict, "1/all_predict.csv")
 
 sum(colnames(df_test %>% select(-date_format))!= colnames(df_res))
 
