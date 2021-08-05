@@ -4,9 +4,11 @@ library(Rcpp)
 library(optimization)
 library(lubridate)
 library(randomForest)
+library(car)
 # install.packages("optimization")
 # install.packages('Rcpp')
-install.packages("randomForest")
+# install.packages('car')
+# install.packages("randomForest")
 
 source("1/prepare_data.r", encoding = "UTF-8")
 
@@ -81,22 +83,11 @@ predict_dates_int = start_date_int:finish_date_int
 
 cur_oktmo <- "30000000000"
 # 
-col_name <-  "mutton"
+col_name <-  "сucumbers_tomatoes"
 
 res_predict <- NULL
 
-except_oktmo <- c("80000000000", 
-                  "86000000000", 
-                  "97000000000",
-                  "1000000000",
-                  "34000000000",
-                  "33000000000",
-                  "24000000000",
-                  "53000000000", 
-                  "75000000000", 
-                  "17000000000", 
-                  "58000000000", 
-                  "41000000000")
+exc_cnt <- 0
 
 # prev year only: 0.007461143484185842
 
@@ -120,7 +111,7 @@ for (cur_oktmo in oktmo_set$oktmo){
   
   df_2020_fit_reg <- df_2020_fit %>% filter(oktmo == cur_oktmo)
   
-  for (col_name in predict_cols){
+  for (col_name in predict_cols[-grep("_value", predict_cols)]){
     # print(col_name)
     col_name2020 <- paste0(col_name, ".2020")
     
@@ -131,42 +122,6 @@ for (cur_oktmo in oktmo_set$oktmo){
     
     if (nrow(df_lm_part) > 0 & sum(df_lm_part[[col_name]]) != 0)
     {
-      
-      test_f <- function(x){
-        return(sum(abs(df_lm_part[[col_name]] - (x[1] + df_lm_part$date_int * x[2] +
-                                                   df_lm_part$isw1 * x[3] +
-                                                   df_lm_part$isw2 * x[4] +
-                                                   df_lm_part$isw3 * x[5] +
-                                                   df_lm_part$isw4 * x[6] +
-                                                   df_lm_part$isw5 * x[7] +
-                                                   df_lm_part$isw6 * x[8] +
-                                                   df_lm_part[[col_name2020]] * x[9])))/nrow(df_lm_part))}
-      
-      if (nrow(df_except %>% filter(e_oktmo == cur_oktmo & e_col_name == col_name)) > 0){
-        print(paste("except", cur_oktmo, col_name))
-        # df_predict[[col_name]] <- ifelse(df_predict[[col_name]] < 60, 60, df_predict[[col_name]])
-        # fit <- glm(as.formula(paste(col_name, " ~ ", col_name2020)),
-        #            data = df_lm_part)
-        fit <- randomForest(as.formula(paste(col_name, " ~ week + ", col_name2020)),
-                            data = df_lm_part, ntree=50)
-      }
-      else
-        fit <- glm(as.formula(paste(col_name, " ~ date_int + week + ", col_name2020)),
-                 data = df_lm_part)
-
-      # fit <- randomForest(as.formula(paste(col_name, " ~ ", col_name2020)),
-      #                     data = df_lm_part, ntree=50)
-      
-      fit$coefficients[is.na(fit$coefficients)] <- 0
-      # summary(fit)
-      
-      # test_f(fit$coefficients)
-      # res <- optim_nm(test_f, k = 9, start = fit$coefficients)
-      # res <- optim_sa(test_f,
-      #                 start = fit$coefficients,
-      #                 lower = fit$coefficients - abs(fit$coefficients) / 2 - 0.1,
-      #                 upper = fit$coefficients + abs(fit$coefficients) / 2 + 0.1)
-      
       
       df_predict <- tibble(date_int = predict_dates_int, 
                            week = factor(predict_dates_int %% 7),
@@ -180,32 +135,71 @@ for (cur_oktmo in oktmo_set$oktmo){
       df_predict <- merge(df_predict, df_2020_fit_reg %>% 
                             select(date, !!col_name2020), 
                           by = "date")
-      # df_predict$is_holiday <- factor(sapply(df_predict$date, is_holiday))
+
+      fit <- glm(as.formula(paste(col_name, 
+                                  " ~ date_int + week + ", 
+                                  col_name2020)),
+                 data = df_lm_part)
+
+      # spl <- c()
+      # while (T){
+      #   # fit$coefficients[is.na(fit$coefficients)] <- 0
+      #   # summary(fit)
+      #   spl_tmp <- outlierTest(fit, cutoff = 0.05)$p
+      #   if (length(spl_tmp) == 0 | spl_tmp[1] > 0.05)
+      #     break
+      #   spl <- as.integer(c(spl, names(spl_tmp)))
+      #   if (nrow(df_lm_part[-spl, ] %>% select(week) %>% distinct()) < 7)
+      #     break
+      #   fit <- glm(as.formula(paste(col_name, 
+      #                               " ~ date_int + week + ", 
+      #                               col_name2020)),
+      #              data = df_lm_part[-spl, ])
+      # }
       
-      if (F) # test_f(res$par) < test_f(fit$coefficients))
-      {
-        x <- res$par
-        df_predict[[col_name]] <- x[1] + df_predict$date_int * x[2] +
-          df_predict$isw1 * x[3] +
-          df_predict$isw2 * x[4] +
-          df_predict$isw3 * x[5] +
-          df_predict$isw4 * x[6] +
-          df_predict$isw5 * x[7] +
-          df_predict$isw6 * x[8] +
-          df_predict[[col_name2020]] * x[9]
+      # df_lm_part[[col_name]][spl]
+      # qplot(x = df_lm_part[-spl, "date"], y = df_lm_part[-spl, col_name])
+
+      df_predict <- df_predict %>% mutate(!!col_name := predict(fit, df_predict))
+      
+      # qplot(x = df_predict$date, y = df_predict[[col_name]])
+      
+      if (min(df_lm_part[[col_name]]) > 0){
+        rate <- mean(df_predict[[col_name]][between(df_predict$date, 
+                                             as.Date("2021-06-20"), 
+                                             as.Date("2021-06-30"))]) /
+          mean(df_predict[[col_name]][between(df_predict$date, 
+                                       as.Date("2021-04-01"), 
+                                       as.Date("2021-04-10"))])
+        if (rate < 1/2 | rate > 2){
+          exc_cnt <- exc_cnt + 1
+          print(paste("except", 
+                      cur_oktmo, 
+                      col_name))
+          # fit <- randomForest(as.formula(paste(col_name, 
+          #                                      " ~ ", 
+          #                                      col_name2020)),
+          #                     data = df_lm_part, ntree=50)
+          fit <- lm(as.formula(paste(col_name, 
+                                     " ~ ", 
+                                     col_name2020)),
+                    data = df_lm_part)
+          
+          # summary(fit)
+          df_predict <- df_predict %>% 
+            mutate(!!col_name := predict(fit, df_predict))
+        }
+        
       }
-      else 
-      {
-        df_predict <- df_predict %>% mutate(!!col_name := predict(fit, df_predict))
-        # print("LM is better")
-        # print(col_name)
-      }
-      df_predict[[col_name]] <- ifelse(df_predict[[col_name]] < 0, 0, df_predict[[col_name]])
+      df_predict[[col_name]] <- ifelse(df_predict[[col_name]] < 0, 
+                                       0, 
+                                       df_predict[[col_name]])
     }
     else
     {
       print(0)
-      df_predict <- df_predict %>% mutate(!!col_name := 0)
+      df_predict <- df_predict %>% 
+        mutate(!!col_name := 0)
     }
     df_predict_reg <- cbind(df_predict_reg, 
                             df_predict %>% 
@@ -220,9 +214,8 @@ for (cur_oktmo in oktmo_set$oktmo){
       df_predict_reg)
 }
 
-
+print(exc_cnt)
 res_predict$date <- res_predict$date_int + min_date
-
 
 df_test <- read_csv("1/test.csv", 
                     col_types = cols(.default = col_character()))
@@ -235,34 +228,29 @@ df_test$date_format <-
                 substr(df_test$date, 1, 2),
                 sep = ""))
 
-df_res <- NULL
+df_res <- merge(df_test %>% 
+                  select(region, okato, oktmo, date, date_format), 
+                res_predict %>% 
+                  filter(date >= as.Date("2021-04-01")),
+                by.x = c("oktmo", "date_format"),
+                by.y = c("oktmo", "date"),
+                sort = F) %>% 
+  select(all_of(colnames(df_test))) %>% 
+  select(-date_format)
 
-for (ind in 1:nrow(df_test)){
-  if (ind %% 1000 == 0)
-    print(ind)
-  cur_date <- df_test$date_format[ind]
-  cur_oktmo <- df_test$oktmo[ind]
-  if (is.null(df_res))
-    df_res <- cbind(df_test[ind, 1:4], 
-                    res_predict %>% 
-                      filter(date == cur_date & 
-                               oktmo == cur_oktmo) %>% 
-                      select(!!predict_cols))
-  else
-    df_res <- rbind(df_res,
-                    cbind(df_test[ind, 1:4], 
-                          res_predict %>% 
-                            filter(date == df_test$date_format[ind] & 
-                                     oktmo == df_test$oktmo[ind]) %>% 
-                            select(!!predict_cols)))
-}
+write_csv(df_res, "1/mytest_ord_lm.csv")
+
+write_csv(res_predict, "1/all_predict.csv")
 
 
-write_csv(df_res, "1/mytest_ord.csv")
+# Проверка корректности порядка строк и столбцов в результирующем наборе
+# sum(df_tmp$date != df_test$date | 
+#       df_tmp$oktmo != df_test$oktmo)
+# 
+# 
+# sum(colnames(df_tmp) != colnames(df_test))
+# sum(colnames(df_test %>% select(-date_format))!= colnames(df_res))
 
-# write_csv(res_predict, "1/all_predict.csv")
-
-sum(colnames(df_test %>% select(-date_format))!= colnames(df_res))
 
 
 ######################################################

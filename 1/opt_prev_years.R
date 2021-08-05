@@ -47,7 +47,7 @@ colnames(df_train)
 
 col_name <- "pasta"
 
-df_predict_test <- read_csv("1/mytest_ord.csv",
+df_predict_test <- read_csv("1/mytest_ord_lm.csv",
                             col_types = cols(
                               .default = col_double(),
                               date = col_character(),
@@ -108,7 +108,7 @@ df_except <- tibble(e_oktmo = vec_oktmo, e_col_name = vec_col_name)
 
 write_csv(df_except, "df_except.csv")
 
-cur_oktmo <- "53000000000"
+cur_oktmo <- "57000000000"
 
 df_years_reg <- df_years %>% filter(oktmo == cur_oktmo)
 df_predict_test_reg <- df_predict_test %>% filter(oktmo == cur_oktmo)
@@ -123,6 +123,8 @@ col_name <- "сucumbers_tomatoes"
 ggplot(data = df_years_reg) +
   geom_path(aes(x = date,
                 y = .data[[col_name]], col = year)) +
+  geom_smooth(aes(x = date,
+                y = .data[[col_name]], col = year), method = "lm") +
   geom_path(data = df_predict_test_reg,
             aes(x = date,
                 y = .data[[col_name]])) +
