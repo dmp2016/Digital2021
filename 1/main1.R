@@ -143,22 +143,33 @@ for (cur_oktmo in oktmo_set$oktmo){
     df_lm_part <- df_lm %>% 
       arrange(df_lm[[col_name]])
     
-    df_lm_part <- df_lm_part[5:(nrow(df_lm_part) - 5), ]
+    if (nrow(df_lm_part[8:(nrow(df_lm_part) - 8), ] %>% 
+             select(week) %>% 
+             distinct()) == 7){
+      df_lm_part <- df_lm_part[8:(nrow(df_lm_part) - 8), ]
+    }
+    else
+      df_lm_part <- df_lm_part[7:(nrow(df_lm_part) - 7), ]
     
     if (nrow(df_lm_part) > 0 & sum(df_lm_part[[col_name]]) != 0)
     {
 
-      if (add_col_name != "")
-        lm_formula <- paste(col_name, 
-                            " ~ date_int + week + ", 
-                            col_name2020,
-                            " + ",
-                            add_col_name)
-      else
-        lm_formula <- paste(col_name, 
-                            " ~ date_int + week + ", 
-                            col_name2020)
+      # if (add_col_name != "")
+      #   lm_formula <- paste(col_name, 
+      #                       " ~ date_int + week + ", 
+      #                       col_name2020,
+      #                       " + ",
+      #                       add_col_name)
+      # else
+      #   lm_formula <- paste(col_name, 
+      #                       " ~ date_int + week + ", 
+      #                       col_name2020)
+
+      lm_formula <- paste(col_name,
+                          " ~ date_int + week + ",
+                          col_name2020)
       
+            
       fit <- glm(as.formula(lm_formula),
                  data = df_lm_part)
 
@@ -181,23 +192,23 @@ for (cur_oktmo in oktmo_set$oktmo){
           print(paste("except", 
                       cur_oktmo, 
                       col_name))
-          # fit <- randomForest(as.formula(paste(col_name, 
-          #                                      " ~ ", 
-          #                                      col_name2020)),
-          #                     data = df_lm_part, ntree=50)
-          if (add_col_name != "")
-            lm_formula_new <- paste(col_name, 
-                                    " ~ ", 
-                                    col_name2020,
-                                    " + ",
-                                    add_col_name)
-          else
-            lm_formula_new <- paste(col_name, 
-                                    " ~ ", 
-                                    col_name2020)
+          fit <- randomForest(as.formula(paste(col_name,
+                                               " ~ ",
+                                               col_name2020)),
+                              data = df_lm_part, ntree=50)
+          # if (add_col_name != "")
+          #   lm_formula_new <- paste(col_name, 
+          #                           " ~ ", 
+          #                           col_name2020,
+          #                           " + ",
+          #                           add_col_name)
+          # else
+          #   lm_formula_new <- paste(col_name, 
+          #                           " ~ ", 
+          #                           col_name2020)
           
-          fit <- lm(as.formula(lm_formula_new),
-                    data = df_lm_part)
+          # fit <- lm(as.formula(lm_formula_new),
+          #           data = df_lm_part)
           
           # summary(fit)
           df_predict <- df_predict %>% 
