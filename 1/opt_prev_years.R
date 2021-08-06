@@ -47,7 +47,7 @@ colnames(df_train)
 
 col_name <- "pasta"
 
-df_predict_test <- read_csv("1/mytest_ord_lm.csv",
+df_predict_test <- read_csv("1/mytest_ord.csv",
                             col_types = cols(
                               .default = col_double(),
                               date = col_character(),

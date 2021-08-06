@@ -91,6 +91,7 @@ exc_cnt <- 0
 
 # prev year only: 0.007461143484185842
 
+
 for (cur_oktmo in oktmo_set$oktmo){
   print(cur_oktmo)
   df_train_date_reg <- df_train_date %>% filter(oktmo == cur_oktmo)
@@ -109,54 +110,58 @@ for (cur_oktmo in oktmo_set$oktmo){
   df_lm$isw6 = as.integer(df_lm$week == 6)
   
   
-  df_2020_fit_reg <- df_2020_fit %>% filter(oktmo == cur_oktmo)
+  df_2020_fit_reg <- df_2020_fit %>% 
+    filter(oktmo == cur_oktmo) %>% 
+    select(-oktmo)
   
-  for (col_name in predict_cols[-grep("_value", predict_cols)]){
-    # print(col_name)
+  df_predict <- tibble(date_int = predict_dates_int, 
+                       week = factor(predict_dates_int %% 7),
+                       date = predict_dates_int + min_date,
+                       isw1 = as.integer(week == 1),
+                       isw2 = as.integer(week == 2),
+                       isw3 = as.integer(week == 3),
+                       isw4 = as.integer(week == 4),
+                       isw5 = as.integer(week == 5),
+                       isw6 = as.integer(week == 6))
+  df_predict <- merge(df_predict, df_2020_fit_reg,
+                      by = "date")
+  
+  
+  for (col_name in predict_cols){
     col_name2020 <- paste0(col_name, ".2020")
+    if (length(grep("_value", col_name)) > 0)
+      add_col_name <- substr(col_name, 1, length(col_name) - 6)
+    else{
+      add_col_name <- paste0(col_name, "_value")
+      if (!(add_col_name %in% predict_cols))
+        add_col_name <- ""
+    }
+    
+    if (add_col_name != "")
+      add_col_name <- paste0(add_col_name, ".2020")
     
     df_lm_part <- df_lm %>% 
       arrange(df_lm[[col_name]])
     
-    df_lm_part <- df_lm_part[7:(nrow(df_lm_part) - 7), ]
+    df_lm_part <- df_lm_part[5:(nrow(df_lm_part) - 5), ]
     
     if (nrow(df_lm_part) > 0 & sum(df_lm_part[[col_name]]) != 0)
     {
-      
-      df_predict <- tibble(date_int = predict_dates_int, 
-                           week = factor(predict_dates_int %% 7),
-                           date = predict_dates_int + min_date,
-                           isw1 = as.integer(week == 1),
-                           isw2 = as.integer(week == 2),
-                           isw3 = as.integer(week == 3),
-                           isw4 = as.integer(week == 4),
-                           isw5 = as.integer(week == 5),
-                           isw6 = as.integer(week == 6))
-      df_predict <- merge(df_predict, df_2020_fit_reg %>% 
-                            select(date, !!col_name2020), 
-                          by = "date")
 
-      fit <- glm(as.formula(paste(col_name, 
-                                  " ~ date_int + week + ", 
-                                  col_name2020)),
+      if (add_col_name != "")
+        lm_formula <- paste(col_name, 
+                            " ~ date_int + week + ", 
+                            col_name2020,
+                            " + ",
+                            add_col_name)
+      else
+        lm_formula <- paste(col_name, 
+                            " ~ date_int + week + ", 
+                            col_name2020)
+      
+      fit <- glm(as.formula(lm_formula),
                  data = df_lm_part)
 
-      # spl <- c()
-      # while (T){
-      #   # fit$coefficients[is.na(fit$coefficients)] <- 0
-      #   # summary(fit)
-      #   spl_tmp <- outlierTest(fit, cutoff = 0.05)$p
-      #   if (length(spl_tmp) == 0 | spl_tmp[1] > 0.05)
-      #     break
-      #   spl <- as.integer(c(spl, names(spl_tmp)))
-      #   if (nrow(df_lm_part[-spl, ] %>% select(week) %>% distinct()) < 7)
-      #     break
-      #   fit <- glm(as.formula(paste(col_name, 
-      #                               " ~ date_int + week + ", 
-      #                               col_name2020)),
-      #              data = df_lm_part[-spl, ])
-      # }
-      
       # df_lm_part[[col_name]][spl]
       # qplot(x = df_lm_part[-spl, "date"], y = df_lm_part[-spl, col_name])
 
@@ -180,9 +185,18 @@ for (cur_oktmo in oktmo_set$oktmo){
           #                                      " ~ ", 
           #                                      col_name2020)),
           #                     data = df_lm_part, ntree=50)
-          fit <- lm(as.formula(paste(col_name, 
-                                     " ~ ", 
-                                     col_name2020)),
+          if (add_col_name != "")
+            lm_formula_new <- paste(col_name, 
+                                    " ~ ", 
+                                    col_name2020,
+                                    " + ",
+                                    add_col_name)
+          else
+            lm_formula_new <- paste(col_name, 
+                                    " ~ ", 
+                                    col_name2020)
+          
+          fit <- lm(as.formula(lm_formula_new),
                     data = df_lm_part)
           
           # summary(fit)
@@ -205,7 +219,6 @@ for (cur_oktmo in oktmo_set$oktmo){
                             df_predict %>% 
                               select(!!col_name))
   }
-  
   if (is.null(res_predict))
     res_predict <- df_predict_reg
   else
@@ -238,7 +251,7 @@ df_res <- merge(df_test %>%
   select(all_of(colnames(df_test))) %>% 
   select(-date_format)
 
-write_csv(df_res, "1/mytest_ord_lm.csv")
+write_csv(df_res, "1/mytest_ord.csv")
 
 write_csv(res_predict, "1/all_predict.csv")
 
@@ -260,8 +273,10 @@ cur_oktmo <- "71000000000"
 cur_oktmo <- "26000000000"
 cur_oktmo <- "64000000000"
 cur_oktmo <- "75000000000"
-cur_oktmo <- "24000000000"
+cur_oktmo <- "33000000000"
 col_name <- "herring_value"
+col_name <- "rice"
+col_name <- "сucumbers_tomatoes"
 ggplot(data = df_train_date %>% 
          filter(oktmo == cur_oktmo)) +
   geom_point(aes(x = date_int, y = .data[[col_name]]), col = "blue") +
