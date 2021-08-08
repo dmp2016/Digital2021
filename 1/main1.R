@@ -91,7 +91,7 @@ exc_cnt <- 0
 
 # prev year only: 0.007461143484185842
 
-
+set.seed(42)
 for (cur_oktmo in oktmo_set$oktmo){
   print(cur_oktmo)
   df_train_date_reg <- df_train_date %>% filter(oktmo == cur_oktmo)
@@ -129,17 +129,7 @@ for (cur_oktmo in oktmo_set$oktmo){
   
   for (col_name in predict_cols){
     col_name2020 <- paste0(col_name, ".2020")
-    if (length(grep("_value", col_name)) > 0)
-      add_col_name <- substr(col_name, 1, length(col_name) - 6)
-    else{
-      add_col_name <- paste0(col_name, "_value")
-      if (!(add_col_name %in% predict_cols))
-        add_col_name <- ""
-    }
-    
-    if (add_col_name != "")
-      add_col_name <- paste0(add_col_name, ".2020")
-    
+
     df_lm_part <- df_lm %>% 
       arrange(df_lm[[col_name]])
     
@@ -153,63 +143,63 @@ for (cur_oktmo in oktmo_set$oktmo){
     
     if (nrow(df_lm_part) > 0 & sum(df_lm_part[[col_name]]) != 0)
     {
-
-      # if (add_col_name != "")
-      #   lm_formula <- paste(col_name, 
-      #                       " ~ date_int + week + ", 
-      #                       col_name2020,
-      #                       " + ",
-      #                       add_col_name)
-      # else
-      #   lm_formula <- paste(col_name, 
-      #                       " ~ date_int + week + ", 
-      #                       col_name2020)
-
+      
       lm_formula <- paste(col_name,
                           " ~ date_int + week + ",
                           col_name2020)
       
-            
+      
       fit <- glm(as.formula(lm_formula),
                  data = df_lm_part)
+      
+      sf <-  summary(fit)
+
+      if (last(sf$coefficients[, 1]) < 0){
+        lm_formula <- paste(col_name,
+                            " ~ date_int + week")
+        
+        fit <- glm(as.formula(lm_formula),
+                   data = df_lm_part)
+      }
+
 
       # df_lm_part[[col_name]][spl]
       # qplot(x = df_lm_part[-spl, "date"], y = df_lm_part[-spl, col_name])
-
+      
       df_predict <- df_predict %>% mutate(!!col_name := predict(fit, df_predict))
       
       # qplot(x = df_predict$date, y = df_predict[[col_name]])
       
       if (min(df_lm_part[[col_name]]) > 0){
         rate <- mean(df_predict[[col_name]][between(df_predict$date, 
-                                             as.Date("2021-06-20"), 
-                                             as.Date("2021-06-30"))]) /
+                                                    as.Date("2021-06-20"), 
+                                                    as.Date("2021-06-30"))]) /
           mean(df_predict[[col_name]][between(df_predict$date, 
-                                       as.Date("2021-04-01"), 
-                                       as.Date("2021-04-10"))])
+                                              as.Date("2021-04-01"), 
+                                              as.Date("2021-04-10"))])
         if (rate < 1/2 | rate > 2){
           exc_cnt <- exc_cnt + 1
           print(paste("except", 
                       cur_oktmo, 
                       col_name))
-          fit <- randomForest(as.formula(paste(col_name,
-                                               " ~ ",
-                                               col_name2020)),
-                              data = df_lm_part, ntree=50)
-          # if (add_col_name != "")
-          #   lm_formula_new <- paste(col_name, 
-          #                           " ~ ", 
-          #                           col_name2020,
-          #                           " + ",
-          #                           add_col_name)
-          # else
-          #   lm_formula_new <- paste(col_name, 
-          #                           " ~ ", 
-          #                           col_name2020)
           
-          # fit <- lm(as.formula(lm_formula_new),
-          #           data = df_lm_part)
+          fit <- lm(as.formula(paste(col_name,
+                                     " ~ ",
+                                     col_name2020)),
+                    data = df_lm_part, ntree=50)
           
+          sf <-  summary(fit)
+          
+          if (last(sf$coefficients[, 1]) < 0)
+            fit <- randomForest(as.formula(paste(col_name,
+                                                 " ~ date_int")),
+                                data = df_lm_part, ntree=50)
+          else
+            fit <- randomForest(as.formula(paste(col_name,
+                                                 " ~ ",
+                                                 col_name2020)),
+                                data = df_lm_part, ntree=50)
+
           # summary(fit)
           df_predict <- df_predict %>% 
             mutate(!!col_name := predict(fit, df_predict))
@@ -297,236 +287,3 @@ ggplot(data = df_train_date %>%
                filter(oktmo == cur_oktmo), 
              aes(x = date_int, y = .data[[col_name]]), col = "red")
 
-
-######################################################
-# LM prediction
-######################################################
-
-
-cur_oktmo <- "71000000000"
-df_train_date_reg <- df_train_date %>% filter(oktmo == cur_oktmo)
-
-
-df_lm <- df_train_date_reg
-df_lm$isw1 = as.integer(df_lm$week == 1)
-df_lm$isw2 = as.integer(df_lm$week == 2)
-df_lm$isw3 = as.integer(df_lm$week == 3)
-df_lm$isw4 = as.integer(df_lm$week == 4)
-df_lm$isw5 = as.integer(df_lm$week == 5)
-df_lm$isw6 = as.integer(df_lm$week == 6)
-wday(as.Date("2021-07-27"))
-
-df_predict <- tibble(date_int = predict_dates_int, 
-                     week = factor(predict_dates_int %% 7),
-                     date = predict_dates_int + min_date,
-                     isw1 = as.integer(week == 1),
-                     isw2 = as.integer(week == 2),
-                     isw3 = as.integer(week == 3),
-                     isw4 = as.integer(week == 4),
-                     isw5 = as.integer(week == 5),
-                     isw6 = as.integer(week == 6),
-)
-df_predict$is_holiday <- factor(sapply(df_predict$date, is_holiday))
-
-
-col_name  <- "chicken_value"
-fit <- glm(as.formula(paste(col_name, " ~ date_int + week + is_holiday")),
-           data = df_lm)
-summary(fit)
-# df_predict <- df_predict %>% mutate(!!col_name := predict(fit, df_predict))
-# df_predict[[col_name]] <- ifelse(df_predict[[col_name]] < 0, 0, df_predict[[col_name]])
-
-
-test_f <- function(x){
-  return(sum(abs(df_lm[[col_name]] - (x[1] + df_lm$date_int * x[2] +
-                                        df_lm$isw1 * x[3] +
-                                        df_lm$isw2 * x[4] +
-                                        df_lm$isw3 * x[5] +
-                                        df_lm$isw4 * x[6] +
-                                        df_lm$isw5 * x[7] +
-                                        df_lm$isw6 * x[8] +
-                                        as.integer(df_lm$is_holiday == "TRUE") * x[9]))))}
-
-
-res <- optim_sa(test_f,
-                start = fit$coefficients,
-                lower = fit$coefficients - abs(fit$coefficients) / 2 - 0.1,
-                upper = fit$coefficients + abs(fit$coefficients) / 2 + 0.1)
-
-res <- optim_nm(test_f, start = c(fit$coefficients), k = 9, exit = 2000)
-
-test_f(c(fit$coefficients))
-test_f(res$par)
-fit$coefficients
-res$par
-
-ggplot(data = df_train_date %>% 
-         filter(oktmo == cur_oktmo)) +
-  geom_point(aes(x = date_int, y = .data[[col_name]]), col = "blue") +
-  geom_line(aes(x = date_int, y = .data[[col_name]]), col = "blue") +
-  geom_smooth(aes(x = date_int, y = .data[[col_name]]), method = "lm") +
-  geom_point(data = df_predict, 
-             aes(x = date_int, y = .data[[col_name]]), col = "red") +
-  geom_point(data = df_predict,
-             aes(x = date_int, y = res$par[1] + 
-                   date_int * res$par[2] + 
-                   as.integer(is_holiday == "TRUE") * res$par[3]), col = "green")
-
-
-
-
-#########################
-# Test lm Warnings
-#########################
-
-cur_oktmo <- "75000000000"
-col_name <- "pasta"
-qplot(data = df_train_date %>% 
-        filter(oktmo == cur_oktmo & date_int <= 80 & .[[col_name]] > 0), 
-      x = date, 
-      y = .data[[col_name]])
-
-
-df_lm <- df_train_date %>% filter(oktmo == cur_oktmo & date_int <= 80) %>% filter(.[[col_name]] > 0)
-df_predict <- tibble(date_int = predict_dates_int, week = factor(predict_dates_int %% 7))
-
-fit <- lm(as.formula(paste(col_name, " ~ date_int")), 
-          data = df_lm)
-df_predict <- df_predict %>% mutate(!!col_name := predict(fit, df_predict))
-
-
-
-#######################################################################
-
-
-
-# length(colnames(df_res))
-# sum(colnames(df_res)[5:79] != predict_cols)
-# 
-# res_test <- merge(df_test %>% select(region, oktmo, okato, date, date_formate),
-#                   res_predict %>% select(-date_int), 
-#                   by.x = c("oktmo", "date_formate"),
-#                   by.y = c("oktmo", "date"))
-# 
-# 
-# res_test$date_formate <- NULL
-# 
-# write_csv(res_test, "1/mytest.csv")
-
-
-
-
-col_name <- "bread_value"
-df_train_date_reg <- df_train_date %>% filter(oktmo == "75000000000")
-df_lm <- df_train_date_reg %>% select(date, date_int, all_of(col_name))
-
-fit <- lm(all_of(bread_value) ~ date_int, data = df_train_date_reg)
-
-fit$coefficients
-
-df_lm$pred <- predict(fit, df_lm)
-
-
-ggplot(data = df_lm %>% 
-         arrange(date)) +
-  geom_point(aes(x = date_int, y = bread_value)) +
-  geom_line(aes(x = date_int, y = bread_value)) +
-  geom_point(aes(x = date_int, y = pred + 0.5 * sin(2 * pi * df_lm$date_int / 10)), 
-             col = "red") +
-  geom_smooth(aes(x = date_int, y = bread_value), method = "lm")
-
-sum(abs(df_lm$pred  + 0.5 * sin(2 * pi * df_lm$date_int / 10 + 1.8) - df_lm$bread))
-
-
-
-
-##########################################
-
-
-
-summary(fit)
-
-
-
-for (col in predict_cols){
-  df_train_col
-}
-
-
-df_train_reg <- df_train_date %>% filter(oktmo == cur_oktmo)
-
-
-df_train_reg$week <- factor(df_train_reg$date_int %% 7)
-weekdays(df_train_reg$date)
-wday(df_train_reg$date)
-
-
-col_name <- "bread"
-fit <- glm(as.formula(paste(col_name, " ~ date_int + week")), data = df_train_reg)
-# fit <- lm(as.formula(paste(col_name, " ~ date_int")), data = df_train_reg)
-
-df_train_reg$pred <- predict(fit, df_train_reg)
-
-
-ggplot(data = df_train_reg %>% 
-         arrange(date)) +
-  geom_point(aes(x = date_int, y = bread)) +
-  geom_line(aes(x = date_int, y = bread)) +
-  geom_point(aes(x = date_int, y = pred), col = "red") +
-  geom_smooth(aes(x = date_int, y = bread), method = "lm")
-
-
-sum(abs(df_train_reg$pred - df_train_reg$bread))
-
-
-
-opt_f <- function(x){
-  sum(abs(df_train_reg$pred  + x[1] * sin(2 * pi * (df_train_reg$date_int + x[3]) / x[2])
-          - df_train_reg[[col_name]]))}
-
-
-opt_f(c(0, 1, 1))
-
-amp <- mean(abs(df_train_reg[[col_name]] - df_train_reg$pred)) / 2
-
-res <- optim_sa(opt_f, 
-                start = c(amp, 45, 45),
-                lower = c(0, 1, 0),
-                upper = c(2 * amp, 90, 90)
-)
-
-
-res$par
-res$function_value
-
-
-ggplot(data = df_train_reg %>% 
-         arrange(date)) +
-  geom_point(aes(x = date_int, y = bread_value)) +
-  geom_line(aes(x = date_int, y = bread_value)) +
-  geom_point(aes(x = date_int, y = pred + res$par[1] * sin(2 * pi * (date_int + res$par[3]) / res$par[2])), 
-             col = "red") +
-  geom_smooth(aes(x = date_int, y = bread_value), method = "lm")
-
-
-
-opt_f(c(amp, 30, 50))
-opt_f(c(0.5, 1.8, 10))
-opt_f(c(0, 6.93, 0))
-
-
-
-
-opt_f_t <- function(x){ opt_f(c(0.2, 2, x)) }
-
-
-qqplot(x = 1:11, y = sapply(1:11, opt_f_t))
-
-test_f <- function(x){x ^ 2 + 1}
-test_f(2)
-optim_sa(test_f, 
-         start = 1,
-         lower = -5,
-         upper = 5)
-
-version
