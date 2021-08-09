@@ -187,15 +187,31 @@ for (cur_oktmo in oktmo_set$oktmo){
           # df_predict[[col_name]][df_predict$date > as.Date("2021-04-20")] <- 
           #   df_predict[[col_name]][df_predict$date == as.Date("2021-04-20")]
           
-          fit.exc <- randomForest(as.formula(paste(col_name,
-                                                   " ~ date_int")),
-                                  data = df_lm_part, ntree=50)
+          if (col_name != "сucumbers_tomatoes"){
+            fit.exc <- randomForest(as.formula(paste(col_name,
+                                                     " ~ date_int")),
+                                    data = df_lm_part, ntree=50)
+            
+            
+            df_predict <- df_predict %>%
+              mutate(!!col_name := predict(fit.exc,
+                                           df_predict))
+            
+          }
+          else{
+            fit.exc <- glm(as.formula(paste(col_name,
+                                            " ~ date_int + week")),
+                           data = df_lm_part)
+      
+            df_predict <- df_predict %>%
+              mutate(!!col_name := predict(fit.exc,
+                                           df_predict))
+            
+            df_predict[[col_name]][df_predict$date > as.Date("2021-04-20")] <-
+              df_predict[[col_name]][df_predict$date == as.Date("2021-04-20")]
+            
+          }
 
-
-          df_predict <- df_predict %>%
-            mutate(!!col_name := predict(fit.exc,
-                                         df_predict))
-          
           
           # fit.test <- lm(as.formula(paste(col_name,
           #                            " ~ ",
