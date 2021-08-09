@@ -102,13 +102,7 @@ for (cur_oktmo in oktmo_set$oktmo){
   # df_lm <- df_train_date_reg %>% filter(.[[col_name]] > 0)
   
   df_lm <- df_train_date_reg
-  df_lm$isw1 = as.integer(df_lm$week == 1)
-  df_lm$isw2 = as.integer(df_lm$week == 2)
-  df_lm$isw3 = as.integer(df_lm$week == 3)
-  df_lm$isw4 = as.integer(df_lm$week == 4)
-  df_lm$isw5 = as.integer(df_lm$week == 5)
-  df_lm$isw6 = as.integer(df_lm$week == 6)
-  
+
   
   df_2020_fit_reg <- df_2020_fit %>% 
     filter(oktmo == cur_oktmo) %>% 
@@ -116,13 +110,7 @@ for (cur_oktmo in oktmo_set$oktmo){
   
   df_predict <- tibble(date_int = predict_dates_int, 
                        week = factor(predict_dates_int %% 7),
-                       date = predict_dates_int + min_date,
-                       isw1 = as.integer(week == 1),
-                       isw2 = as.integer(week == 2),
-                       isw3 = as.integer(week == 3),
-                       isw4 = as.integer(week == 4),
-                       isw5 = as.integer(week == 5),
-                       isw6 = as.integer(week == 6))
+                       date = predict_dates_int + min_date)
   df_predict <- merge(df_predict, df_2020_fit_reg,
                       by = "date")
   
@@ -186,7 +174,7 @@ for (cur_oktmo in oktmo_set$oktmo){
           fit <- lm(as.formula(paste(col_name,
                                      " ~ ",
                                      col_name2020)),
-                    data = df_lm_part, ntree=50)
+                    data = df_lm_part)
           
           sf <-  summary(fit)
           
@@ -194,11 +182,15 @@ for (cur_oktmo in oktmo_set$oktmo){
             fit <- randomForest(as.formula(paste(col_name,
                                                  " ~ date_int")),
                                 data = df_lm_part, ntree=50)
-          else
-            fit <- randomForest(as.formula(paste(col_name,
-                                                 " ~ ",
-                                                 col_name2020)),
-                                data = df_lm_part, ntree=50)
+          else{
+            if (sf$coefficients[col_name2020, "Pr(>|t|)"] > 0.05)
+              fit <- randomForest(as.formula(paste(col_name,
+                                                   " ~ ",
+                                                   col_name2020)),
+                                  data = df_lm_part, ntree=50)
+            else
+              print("-")
+          }
 
           # summary(fit)
           df_predict <- df_predict %>% 
