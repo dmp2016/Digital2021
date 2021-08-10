@@ -1,5 +1,5 @@
 library(tidyverse)
-library(scorer)
+# library(scorer)
 library(Rcpp)
 library(optimization)
 library(lubridate)
@@ -24,55 +24,28 @@ df_train_date$date_int <- as.integer(difftime(df_train_date$date,
                                               units = "days"))
 
 df_train_date$week <- factor(df_train_date$date_int %% 7)
-df_train_date$is_holiday <- factor(sapply(df_train_date$date, is_holiday))
+
+oktmo_set <- df_train_date %>% select(oktmo) %>% distinct()
 
 days_amount <- difftime("2021-06-30", "2021-02-01", units = "days")
 
 df_2020 <- df_train %>% 
   filter(between(date, 
                  as.Date("2020-02-01") + 2, 
-                 as.Date("2020-02-01") + 2 + days_amount)) %>% 
+                 as.Date("2020-12-31")))%>% 
   mutate(date = date + 366 - 2, year = 2020)
-
 
 df_2020_fit <- df_2020 %>% 
   select(date, oktmo, all_of(predict_cols)) %>% 
   rename(setNames(predict_cols, paste0(predict_cols, ".2020"))) %>% 
-  mutate(date_int_1 = as.integer(difftime(date, 
-                                          min_date, 
-                                          units = "days"))) %>% 
-  arrange(date_int_1)
+  arrange(date)
 
-
-oktmo_set <- df_train_date %>% select(oktmo) %>% distinct()
-
-# for (cur_oktmo in oktmo_set$oktmo) {
-#   for (cur_col in paste0(predict_cols, ".2020")){
-#     df_2020_fit[[cur_col]][df_2020_fit$oktmo == cur_oktmo] <-
-#       smooth(x = df_2020_fit[[cur_col]][df_2020_fit$oktmo == cur_oktmo])
-#   }
-# }
 
 df_2020_fit$date_int_1 <- NULL
 
 
-# ggplot(data = df_2020_fit %>% filter(oktmo == "30000000000")) +
-#   geom_point(aes(x = date, y = vegetables.2020), col = "red") +
-#   geom_point(data = df_2020_fit_a %>% filter(oktmo == "30000000000"), aes(x = date, y = vegetables), col = "blue")
-#        
-# qplot(data = df_2020_fit %>% filter(oktmo == "30000000000"), 
-#       x = date, 
-#       y = pasta.2020)
-
-
 df_train_date <- merge(df_train_date, df_2020_fit, by = c("oktmo", "date"))
 
-
-# df_train_date %>% select(date, is_holiday) %>% distinct()
-
-
-# date_list <- as.Date(c("2021-01-25", "2021-02-01", "2021-02-07", "2021-02-15"))
-# start_predict <- last(date_list)
 start_predict <- start_date
 finish_predict <- as.Date("2021-06-30")
 
@@ -94,6 +67,8 @@ except_col <- c()
 
 # prev year only: 0.007461143484185842
 
+shifts <- list()
+
 set.seed(42)
 for (cur_oktmo in oktmo_set$oktmo){
   print(cur_oktmo)
@@ -105,27 +80,16 @@ for (cur_oktmo in oktmo_set$oktmo){
   # df_lm <- df_train_date_reg %>% filter(.[[col_name]] > 0)
   
   df_lm <- df_train_date_reg
-  df_lm$isw1 = as.integer(df_lm$week == 1)
-  df_lm$isw2 = as.integer(df_lm$week == 2)
-  df_lm$isw3 = as.integer(df_lm$week == 3)
-  df_lm$isw4 = as.integer(df_lm$week == 4)
-  df_lm$isw5 = as.integer(df_lm$week == 5)
-  df_lm$isw6 = as.integer(df_lm$week == 6)
-  
+
   
   df_2020_fit_reg <- df_2020_fit %>% 
     filter(oktmo == cur_oktmo) %>% 
-    select(-oktmo)
+    select(-oktmo) %>% 
+    arrange(date)
   
   df_predict <- tibble(date_int = predict_dates_int, 
                        week = factor(predict_dates_int %% 7),
-                       date = predict_dates_int + min_date,
-                       isw1 = as.integer(week == 1),
-                       isw2 = as.integer(week == 2),
-                       isw3 = as.integer(week == 3),
-                       isw4 = as.integer(week == 4),
-                       isw5 = as.integer(week == 5),
-                       isw6 = as.integer(week == 6))
+                       date = predict_dates_int + min_date)
   df_predict <- merge(df_predict, df_2020_fit_reg,
                       by = "date")
   
@@ -134,6 +98,38 @@ for (cur_oktmo in oktmo_set$oktmo){
     col_name2020 <- paste0(col_name, ".2020")
     
     df_lm_part <- df_lm %>% 
+      arrange(date)
+    
+    
+    col_2020_data <- df_2020_fit_reg[[col_name2020]]
+    
+    shift_2020 <- which.max(sapply(1:25, function(x){
+      cor.test(col_2020_data[x:(x + nrow(df_lm_part) - 1)],
+               df_lm_part[[col_name]])$conf.int[1]}))
+    
+    if (length(shift_2020) == 0)
+      shift_2020 <- 1
+
+    shifts[[cur_oktmo]][col_name] <- shift_2020
+      
+    df_lm_part[["shifted"]] <- col_2020_data[shift_2020:(shift_2020 + nrow(df_lm_part) - 1)]
+    df_predict[["shifted"]] <- col_2020_data[shift_2020:(shift_2020 + nrow(df_predict) - 1)]
+
+    # ggplot() +
+    #   geom_point(data = df_predict,
+    #              aes(x = date, 
+    #                  y = .data[[col_name2020]]), 
+    #              col = "red") +
+    #   geom_point(data = df_lm_part,
+    #              aes(x = date, 
+    #                  y = .data[[col_name]]), 
+    #              col = "blue") +
+    #   geom_point(data = df_2020_fit %>% 
+    #                filter(oktmo == cur_oktmo),
+    #              aes(x = date, 
+    #                  y = .data[[col_name2020]]), col = "green")
+    
+    df_lm_part <- df_lm_part %>% 
       arrange(df_lm[[col_name]])
     
     if (nrow(df_lm_part[8:(nrow(df_lm_part) - 8), ] %>% 
@@ -184,8 +180,14 @@ for (cur_oktmo in oktmo_set$oktmo){
           except_oktmo[exc_cnt] <- cur_oktmo
           except_col[exc_cnt] <- col_name
           
-          # df_predict[[col_name]][df_predict$date > as.Date("2021-04-20")] <- 
-          #   df_predict[[col_name]][df_predict$date == as.Date("2021-04-20")]
+          # fit.exc <- glm(as.formula(paste(col_name,
+          #                                 " ~ ",
+          #                                 col_name2020)),
+          #                data = df_lm_part)
+          # 
+          # df_predict <- df_predict %>%
+          #   mutate(!!col_name := predict(fit.exc,
+          #                                df_predict))
           
           if (col_name != "сucumbers_tomatoes"){
             fit.exc <- randomForest(as.formula(paste(col_name,
@@ -200,53 +202,19 @@ for (cur_oktmo in oktmo_set$oktmo){
           }
           else{
             fit.exc <- glm(as.formula(paste(col_name,
-                                            " ~ date_int + week")),
+                                            " ~ shifted")),
                            data = df_lm_part)
-      
+            
             df_predict <- df_predict %>%
               mutate(!!col_name := predict(fit.exc,
                                            df_predict))
             
-            df_predict[[col_name]][df_predict$date > as.Date("2021-04-20")] <-
-              df_predict[[col_name]][df_predict$date == as.Date("2021-04-20")]
+            # df_predict[[col_name]][df_predict$date > as.Date("2021-04-20")] <-
+            #   df_predict[[col_name]][df_predict$date == as.Date("2021-04-20")]
             
           }
 
-          
-          # fit.test <- lm(as.formula(paste(col_name,
-          #                            " ~ ",
-          #                            col_name2020)),
-          #           data = df_lm_part, ntree=50)
-          # 
-          # 
-          # sf <-  summary(fit.test)
-          
-          # if (col_name != "сucumbers_tomatoes"){
-          #   if (last(sf$coefficients[, 1]) < 0)
-          #     fit.exc <- randomForest(as.formula(paste(col_name,
-          #                                          " ~ date_int")),
-          #                         data = df_lm_part, ntree=50)
-          #   else
-          #     fit.exc <- randomForest(as.formula(paste(col_name,
-          #                                          " ~ ",
-          #                                          col_name2020)),
-          #                         data = df_lm_part, ntree=50)
-          #   df_predict <- df_predict %>% 
-          #     mutate(!!col_name := predict(fit.exc, df_predict))
-          #   
-          # }
-          # else{
-          #   min_val <- mean(df_predict[[col_name]][between(df_predict$date, 
-          #                                                  as.Date("2021-04-01"), 
-          #                                                  as.Date("2021-04-10"))]) / 1.5
-          #   
-          #   df_predict[[col_name]] <- ifelse(df_predict[[col_name]] < min_val, 
-          #                                    min_val, 
-          #                                    df_predict[[col_name]])
-          #   
-          # }
 
-          # summary(fit)
         }
         
       }
