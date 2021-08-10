@@ -189,31 +189,23 @@ for (cur_oktmo in oktmo_set$oktmo){
           #   mutate(!!col_name := predict(fit.exc,
           #                                df_predict))
           
-          if (col_name != "сucumbers_tomatoes"){
+          fit.exc <- glm(as.formula(paste(col_name,
+                                          " ~ shifted")),
+                         data = df_lm_part)
+
+          sf_exc <- summary(fit.exc)
+          
+          if (last(sf_exc$coefficients[, 1]) < 0){
+            print("-")
+            
             fit.exc <- randomForest(as.formula(paste(col_name,
                                                      " ~ date_int")),
                                     data = df_lm_part, ntree=50)
-            
-            
-            df_predict <- df_predict %>%
-              mutate(!!col_name := predict(fit.exc,
-                                           df_predict))
-            
           }
-          else{
-            fit.exc <- glm(as.formula(paste(col_name,
-                                            " ~ shifted")),
-                           data = df_lm_part)
             
-            df_predict <- df_predict %>%
-              mutate(!!col_name := predict(fit.exc,
-                                           df_predict))
-            
-            # df_predict[[col_name]][df_predict$date > as.Date("2021-04-20")] <-
-            #   df_predict[[col_name]][df_predict$date == as.Date("2021-04-20")]
-            
-          }
-
+          df_predict <- df_predict %>%
+            mutate(!!col_name := predict(fit.exc,
+                                         df_predict))
 
         }
         
