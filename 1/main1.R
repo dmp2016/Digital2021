@@ -101,9 +101,7 @@ for (cur_oktmo in oktmo_set$oktmo){
       arrange(date)
     
     
-    col_2020_data <- roll_mean(df_2020_fit_reg[[col_name2020]],
-                               n = 7)
-    
+    col_2020_data <- df_2020_fit_reg[[col_name2020]]
     
     shift_2020 <- which.max(sapply(1:25, function(x){
       cor.test(col_2020_data[x:(x + nrow(df_lm_part) - 1)],
@@ -145,23 +143,23 @@ for (cur_oktmo in oktmo_set$oktmo){
     if (nrow(df_lm_part) > 0 & sum(df_lm_part[[col_name]]) != 0)
     {
       
-      cor_res <- cor.test(df_lm_part[[col_name]], 
-                          df_lm_part[[col_name2020]])
-
-
-      if (is.na(cor_res$statistic) | cor_res$conf.int[1] < 0){
+      lm_formula <- paste(col_name,
+                          " ~ date_int + week + ",
+                          col_name2020)
+      
+      
+      fit.glm <- glm(as.formula(lm_formula),
+                     data = df_lm_part)
+      
+      sf <-  summary(fit.glm)
+      
+      if (last(sf$coefficients[, 1]) < 0){
         lm_formula <- paste(col_name,
                             " ~ date_int + week")
         
+        fit.glm <- glm(as.formula(lm_formula),
+                       data = df_lm_part)
       }
-      else{
-        lm_formula <- paste(col_name,
-                            " ~ date_int + week + ",
-                            col_name2020)
-      }
-
-      fit.glm <- glm(as.formula(lm_formula),
-                     data = df_lm_part)
       
       
       df_predict <- df_predict %>% mutate(!!col_name := predict(fit.glm, df_predict))
@@ -192,15 +190,25 @@ for (cur_oktmo in oktmo_set$oktmo){
           #                                df_predict))
           
           if (col_name != "сucumbers_tomatoes"){
-            fit.exc <- randomForest(as.formula(paste(col_name,
-                                                     " ~ date_int")),
-                                    data = df_lm_part, ntree=50)
+            fit.exc <- glm(as.formula(paste(col_name,
+                                            " ~ date_int + week")),
+                           data = df_lm_part)
             
+            # fit.exc <- randomForest(as.formula(paste(col_name,
+            #                                          " ~ date_int")),
+            #                         data = df_lm_part, ntree=50)
             
             df_predict <- df_predict %>%
               mutate(!!col_name := predict(fit.exc,
                                            df_predict))
             
+            
+            c_val <- mean(df_predict[[col_name]][between(df_predict$date,
+                                                         as.Date("2021-04-15"),
+                                                         as.Date("2021-04-20"))])
+            df_predict[[col_name]][df_predict$date > as.Date("2021-04-15")] <- c_val
+#              df_predict[[col_name]][df_predict$date == as.Date("2021-04-15")]
+
           }
           else{
             fit.exc <- glm(as.formula(paste(col_name,
@@ -339,7 +347,7 @@ for (ind in 1:exc_cnt){
                       filter(oktmo == cur_oktmo),
                     aes(x = date, 
                         y = .data[[paste0(col_name,
-                                          ".2020")]]), col = "green")) +
-    ggtitle(cur_oktmo)
+                                          ".2020")]]), col = "green") +
+         ggtitle(cur_oktmo))
   
 }
