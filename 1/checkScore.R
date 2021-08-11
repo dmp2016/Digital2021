@@ -51,3 +51,4 @@ write_csv(tibble(name = names(col_est_sort),
           "estimates_col.csv")
 
 # [1] 0.004009896 - current best, 
+# [1] 0.00648237 - use best method
