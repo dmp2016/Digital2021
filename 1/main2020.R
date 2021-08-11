@@ -12,6 +12,10 @@ library(RcppRoll)
 # install.packages("randomForest")
 
 
+calc_error <- function(truth, test){
+  return(mean(abs(truth - test))/mean(truth))
+}
+
 C_CUR_YEAR <- "2020"
 C_PREV_YEAR <- as.character(as.integer(C_CUR_YEAR) - 1)
 
@@ -94,10 +98,10 @@ for (cur_oktmo in oktmo_set$oktmo){
                        date = predict_dates_int + min_date)
   
   ## Для тестирования качества
-  df_predict <- df_predict %>% 
-    inner_join(df_train %>% 
-                 filter(oktmo == cur_oktmo), 
-               by = c("date")) %>% 
+  df_predict <- df_predict %>%
+    inner_join(df_train %>%
+                 filter(oktmo == cur_oktmo),
+               by = c("date")) %>%
     rename(setNames(predict_cols, paste0(predict_cols, ".ans")))
   ## Для тестирования качества
     
@@ -115,11 +119,18 @@ for (cur_oktmo in oktmo_set$oktmo){
       arrange(date)
     
     
-    # col_prev_data <- roll_mean(df_prev_fit_reg[[col_name_prev]],
-    #                            n = 7)
+    col_prev_data_smooth <- roll_mean(df_prev_fit_reg[[col_name_prev]],
+                                      n = 7)
+    
+    shift_prev_smooth <- which.max(sapply(1:25, function(x){
+      cor.test(col_prev_data_smooth[x:(x + nrow(df_lm_part) - 1)],
+               df_lm_part[[col_name]])$conf.int[1]}))
+
+    if (length(shift_prev_smooth) == 0)
+      shift_prev_smooth <- 1
+    
     
     col_prev_data <- df_prev_fit_reg[[col_name_prev]]
-    
     
     shift_prev <- which.max(sapply(1:25, function(x){
       cor.test(col_prev_data[x:(x + nrow(df_lm_part) - 1)],
@@ -132,6 +143,9 @@ for (cur_oktmo in oktmo_set$oktmo){
     
     df_lm_part[["shifted"]] <- col_prev_data[shift_prev:(shift_prev + nrow(df_lm_part) - 1)]
     df_predict[["shifted"]] <- col_prev_data[shift_prev:(shift_prev + nrow(df_predict) - 1)]
+
+    df_lm_part[["shifted_smooth"]] <- col_prev_data_smooth[shift_prev_smooth:(shift_prev_smooth + nrow(df_lm_part) - 1)]
+    df_predict[["shifted_smooth"]] <- col_prev_data_smooth[shift_prev_smooth:(shift_prev_smooth + nrow(df_predict) - 1)]
     
     # ggplot() +
     #   geom_point(data = df_predict,
@@ -147,83 +161,44 @@ for (cur_oktmo in oktmo_set$oktmo){
     #              aes(x = date, 
     #                  y = .data[[col_name2020]]), col = "green")
     
-    # df_lm_part <- df_lm_part %>%
-    #   arrange(df_lm[[col_name]])
-    # 
-    # if (nrow(df_lm_part[8:(nrow(df_lm_part) - 8), ] %>%
-    #          select(week) %>%
-    #          distinct()) == 7){
-    #   df_lm_part <- df_lm_part[8:(nrow(df_lm_part) - 8), ]
-    # }
-    # else
-    #   df_lm_part <- df_lm_part[7:(nrow(df_lm_part) - 7), ]
+    df_lm_part <- df_lm_part %>%
+      arrange(df_lm[[col_name]])
+
+    if (nrow(df_lm_part[8:(nrow(df_lm_part) - 8), ] %>%
+             select(week) %>%
+             distinct()) == 7){
+      df_lm_part <- df_lm_part[8:(nrow(df_lm_part) - 8), ]
+    }
+    else
+      df_lm_part <- df_lm_part[7:(nrow(df_lm_part) - 7), ]
     
-    # tmp_val <- df_lm_part[[col_name]]
-    # 
-    # df_lm_part <- df_lm_part[4:(nrow(df_lm_part) - 3), ]
-    # 
-    # df_lm_part[[col_name]] <- roll_mean(tmp_val,
-    #                                     n = 7)
-    
-    
+
     if (nrow(df_lm_part) > 0 & sum(df_lm_part[[col_name]]) != 0)
     {
-      
-      # lm_formula <- paste(col_name,
-      #                     " ~ date_int + week + ",
-      #                     col_name_prev)
-      
-      # if (length(grep("_value", col_name)) > 0){
-      #   add_col <- " + price"
-      #   price_col <- substr(col_name, 1, nchar(col_name) - 6)
-      # 
-      #   tmp <- df_predict %>% 
-      #     select(date, !!price_col)
-      #   
-      #   tmp$price <- tmp[[price_col]]
-      #   tmp[[price_col]] <- NULL
-      #           
-      #   df_lm_part <- df_lm_part %>% 
-      #     inner_join(tmp, by = "date")
-      # }
-      # else
-      #   add_col <- ""
-      add_col <- ""
-        
 
-      # lm_formula <- paste(col_name,
-      #                     " ~ date_int + week + ",
-      #                     col_name_prev)
-      # 
-      # fit.glm <- glm(as.formula(lm_formula),
-      #                data = df_lm_part)
-      # 
-      # sf <-  summary(fit.glm)
-      # 
-      # if (last(sf$coefficients[, 1]) < 0){
-      #   lm_formula <- paste(col_name,
-      #                       " ~ date_int + week",
-      #                       add_col)
-      #   
-      #   fit.glm <- glm(as.formula(lm_formula),
-      #                  data = df_lm_part)
-      # }
-      # 
-      # 
-      # df_predict <- df_predict %>% mutate(!!col_name := predict(fit.glm, df_predict))
+      err_methods <- c()
+      # 1      
+      lm_formula <- paste(col_name,
+                          " ~ date_int + week + ",
+                          col_name_prev)
       
-      data <- ts(df_lm_part[[col_name]], frequency = 7)
-      # L <- BoxCox.lambda(data, method="loglik")
-      
-      fit.arima <- auto.arima(data, lambda="auto")
-      
-      # h = difftime(as.Date("2021-06-30"),
-      #              as.Date("2021-04-01"),
-      #              units = "days")
-      fcast.arima <- forecast(fit.arima, 91)
-      df_predict[[col_name]] <- c(df_lm_part[[col_name]], fcast.arima$mean)
+      fit.glm <- glm(as.formula(lm_formula),
+                     data = df_lm_part)
 
+      sf <-  summary(fit.glm)
+
+      if (last(sf$coefficients[, 1]) < 0){
+        lm_formula <- paste(col_name,
+                            " ~ date_int + week")
+
+        fit.glm <- glm(as.formula(lm_formula),
+                       data = df_lm_part)
+      }
+
+
+      df_predict <- df_predict %>% mutate(!!col_name := predict(fit.glm, df_predict))
       
+
       if (min(df_lm_part[[col_name]]) > 0){
         rate <- mean(df_predict[[col_name]][between(df_predict$date, 
                                                     as.Date(paste0(C_CUR_YEAR, "-06-20")), 
@@ -241,31 +216,24 @@ for (cur_oktmo in oktmo_set$oktmo){
           
 
           if (col_name != "сucumbers_tomatoes"){
-            fit.exc <- glm(as.formula(paste(col_name,
-                                            " ~ date_int + week")),
-                           data = df_lm_part)
-
+            fit.exc <- randomForest(as.formula(paste(col_name,
+                                                     " ~ date_int")),
+                                    data = df_lm_part, ntree=50)
+            
+            
             df_predict <- df_predict %>%
               mutate(!!col_name := predict(fit.exc,
                                            df_predict))
-
-
-            c_val <- mean(df_predict[[col_name]][between(df_predict$date,
-                                                         as.Date(paste0(C_CUR_YEAR, "-04-15")),
-                                                         as.Date(paste0(C_CUR_YEAR, "-04-20")))])
-            df_predict[[col_name]][df_predict$date > as.Date("2021-04-15")] <- c_val
-            #              df_predict[[col_name]][df_predict$date == as.Date("2021-04-15")]
-
+            
           }
           else{
             fit.exc <- glm(as.formula(paste(col_name,
                                             " ~ shifted")),
                            data = df_lm_part)
-
+            
             df_predict <- df_predict %>%
               mutate(!!col_name := predict(fit.exc,
                                            df_predict))
-
           }
         }
       }
@@ -280,17 +248,20 @@ for (cur_oktmo in oktmo_set$oktmo){
         mutate(!!col_name := 0)
     }
     
-    df_1 <- df_train %>% 
+    # Оценка качества
+    df_1 <- df_train %>%
       filter(between(date,
                      as.Date("2020-04-01"),
                      as.Date("2020-06-30")))
-    
+
     err <- mean(abs(df_predict[[paste0(col_name, ".ans")]] -  df_predict[[col_name]])) /
       mean(abs(df_predict[[paste0(col_name, ".ans")]]))
-    
-    estimates[paste0(cur_oktmo, 
+
+    estimates[paste0(cur_oktmo,
                      ".",
                      col_name)] <- 1 / (1000 * err)
+    # Оценка качества
+    
     df_predict_reg <- cbind(df_predict_reg, 
                             df_predict %>% 
                               select(!!col_name))
@@ -314,7 +285,8 @@ res_predict$date <- res_predict$date_int + min_date
 df_test <- read_csv("1/test.csv", 
                     col_types = cols(.default = col_character()))
 
-df_test$date_format <- convert_input_date(df_test$date) - 365
+df_test$date_format <- convert_input_date(df_test$date)
+df_test$date_format <- df_test$date_format - 365
 df_test$date <- convert_date_to_inp(df_test$date_format)
 
 df_res <- merge(df_test %>% 

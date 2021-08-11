@@ -50,4 +50,4 @@ write_csv(tibble(name = names(col_est_sort),
                  est = col_est_sort), 
           "estimates_col.csv")
 
-# 0.004003584
+# [1] 0.004009896 - current best, 
