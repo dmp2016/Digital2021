@@ -104,6 +104,9 @@ for (cur_oktmo in oktmo_set$oktmo){
   df_predict <- merge(df_predict, df_prev_fit_reg,
                       by = "date")
   
+  df_predict <- df_predict %>% 
+    arrange(date)
+  
   
   for (col_name in predict_cols){
     col_name_prev <- paste0(col_name, ".prev")
@@ -210,15 +213,15 @@ for (cur_oktmo in oktmo_set$oktmo){
       # df_predict <- df_predict %>% mutate(!!col_name := predict(fit.glm, df_predict))
       
       data <- ts(df_lm_part[[col_name]], frequency = 7)
-      L <- BoxCox.lambda(data, method="loglik")
+      # L <- BoxCox.lambda(data, method="loglik")
       
-      fit.arima <- auto.arima(data, lambda=L)
+      fit.arima <- auto.arima(data, lambda="auto")
       
       # h = difftime(as.Date("2021-06-30"),
       #              as.Date("2021-04-01"),
       #              units = "days")
-      fcast.arima <- forecast(fit.arima, 3, lambda=L)
-      df_predict[[col_name]] <- fcast.arima$mean
+      fcast.arima <- forecast(fit.arima, 91)
+      df_predict[[col_name]] <- c(df_lm_part[[col_name]], fcast.arima$mean)
 
       
       if (min(df_lm_part[[col_name]]) > 0){
@@ -431,3 +434,30 @@ for (cur_oktmo in oktmo_set$oktmo){
   
 }
 
+
+cur_oktmo <- "71000000000"
+for (col_name in predict_cols){
+  show(ggplot(data = df_train_date %>% 
+                filter(oktmo == cur_oktmo)) +
+         geom_point(aes(x = date, 
+                        y = .data[[col_name]]), 
+                    col = "blue") +
+         geom_line(aes(x = date, 
+                       y = .data[[col_name]]), 
+                   col = "blue") +
+         geom_smooth(aes(x = date, 
+                         y = .data[[col_name]]), 
+                     method = "lm") +
+         geom_point(data = df_predict %>% 
+                      filter(oktmo == cur_oktmo), 
+                    aes(x = date, 
+                        y = .data[[col_name]]), 
+                    col = "red") +
+         geom_point(data = df_prev_fit %>% 
+                      filter(oktmo == cur_oktmo),
+                    aes(x = date, 
+                        y = .data[[paste0(col_name,
+                                          ".prev")]]), col = "green") +
+         ggtitle(cur_oktmo))
+  
+}
