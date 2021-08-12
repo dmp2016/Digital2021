@@ -174,169 +174,73 @@ for (cur_oktmo in oktmo_set$oktmo){
     if (nrow(df_lm_part) > 0 & sum(df_lm_part[[col_name]]) != 0)
     {
       
-      bm <- best_method2021[col_name]
+      lm_formula <- paste(col_name,
+                          " ~ date_int + week + ",
+                          col_name_prev)
       
-      if (!is.na(bm))
-      {
-        switch(bm,
-               {
-                 # 1
-                 lm_formula <- paste(col_name,
-                                     " ~ date_int + week + ",
-                                     col_name_prev)
-                 
-                 fit.glm <- glm(as.formula(lm_formula),
-                                data = df_lm_part)
-                 df_predict <- df_predict %>% mutate(!!col_name := predict(fit.glm, df_predict))
-               },
-               {
-                 # 2
-                 lm_formula <- paste(col_name,
-                                     " ~ date_int + week + shifted")
-                 
-                 fit.glm <- glm(as.formula(lm_formula),
-                                data = df_lm_part)
-                 df_predict <- df_predict %>% mutate(!!col_name := predict(fit.glm, df_predict))
-               },
-               {
-                 # 3
-                 lm_formula <- paste(col_name,
-                                     " ~ date_int + week + shifted_smooth")
-                 
-                 fit.glm <- glm(as.formula(lm_formula),
-                                data = df_lm_part)
-                 
-                 df_predict <- df_predict %>% mutate(!!col_name := predict(fit.glm, df_predict))
-               },
-               {
-                 # 4
-                 lm_formula <- paste(col_name,
-                                     " ~ date_int + week")
-                 
-                 fit.glm <- glm(as.formula(lm_formula),
-                                data = df_lm_part)
-                 
-                 df_predict <- df_predict %>% mutate(!!col_name := predict(fit.glm, df_predict))
-                 
-               },
-               {
-                 # 5
-                 fit.exc <- randomForest(as.formula(paste(col_name,
-                                                          " ~ date_int")),
-                                         data = df_lm_part, ntree=50)
-                 
-                 df_predict <- df_predict %>% mutate(!!col_name := predict(fit.exc, df_predict))
-               },
-               {
-                 # 6
-                 lm_formula <- paste(col_name,
-                                     " ~ shifted")
-                 
-                 fit.glm <- glm(as.formula(lm_formula),
-                                data = df_lm_part)
-                 
-                 df_predict <- df_predict %>% mutate(!!col_name := predict(fit.glm, df_predict))
-               },
-               {
-                 # 7
-                 lm_formula <- paste(col_name,
-                                     " ~ shifted_smooth")
-                 
-                 fit.glm <- glm(as.formula(lm_formula),
-                                data = df_lm_part)
-                 
-                 df_predict <- df_predict %>% mutate(!!col_name := predict(fit.glm, df_predict))
-               },
-               {
-                 # 8
-                 lm_formula <- paste(col_name, " ~ ", col_name_prev)
-                 
-                 fit.glm <- glm(as.formula(lm_formula),
-                                data = df_lm_part)
-                 
-                 df_predict <- df_predict %>% mutate(!!col_name := predict(fit.glm, df_predict))
-               },
-               {
-                 # 9
-                 lm_formula <- paste(col_name,
-                                     " ~ date_int + week")
-                 
-                 fit.glm <- glm(as.formula(lm_formula),
-                                data = df_lm_part)
-                 
-                 
-                 df_predict <- df_predict %>% mutate(!!col_name := predict(fit.glm, df_predict))
-               }
-        )
-      }
-      else
+      
+      fit.glm <- glm(as.formula(lm_formula),
+                     data = df_lm_part)
+      
+      sf <-  summary(fit.glm)
+      
+      if (last(sf$coefficients[, 1]) < 0)
       {
         lm_formula <- paste(col_name,
-                            " ~ date_int + week + ",
-                            col_name_prev)
-        
+                            " ~ date_int + week")
         
         fit.glm <- glm(as.formula(lm_formula),
                        data = df_lm_part)
-        
-        sf <-  summary(fit.glm)
-        
-        if (last(sf$coefficients[, 1]) < 0)
+      }
+      
+      
+      df_predict <- df_predict %>% mutate(!!col_name := predict(fit.glm, df_predict))
+      
+      
+      if (min(df_lm_part[[col_name]]) > 0)
+      {
+        rate <- mean(df_predict[[col_name]][between(df_predict$date,
+                                                    as.Date("2020-06-20"),
+                                                    as.Date("2020-06-30"))]) /
+          mean(df_predict[[col_name]][between(df_predict$date,
+                                              as.Date("2020-04-01"),
+                                              as.Date("2020-04-10"))])
+        if (rate < 1/1.5 | rate > 1.5)
         {
-          lm_formula <- paste(col_name,
-                              " ~ date_int + week")
+          exc_cnt <- exc_cnt + 1
+          print(paste("except",
+                      cur_oktmo,
+                      col_name))
+          except_oktmo[exc_cnt] <- cur_oktmo
+          except_col[exc_cnt] <- col_name
           
-          fit.glm <- glm(as.formula(lm_formula),
-                         data = df_lm_part)
-        }
-        
-        
-        df_predict <- df_predict %>% mutate(!!col_name := predict(fit.glm, df_predict))
-        
-        
-        if (min(df_lm_part[[col_name]]) > 0)
-        {
-          rate <- mean(df_predict[[col_name]][between(df_predict$date,
-                                                      as.Date("2020-06-20"),
-                                                      as.Date("2020-06-30"))]) /
-            mean(df_predict[[col_name]][between(df_predict$date,
-                                                as.Date("2020-04-01"),
-                                                as.Date("2020-04-10"))])
-          if (rate < 1/2 | rate > 2)
+          if (col_name != "сucumbers_tomatoes" & length(grep("_value", 
+                                                             col_name, 
+                                                             fixed = T)) == 0)
           {
-            exc_cnt <- exc_cnt + 1
-            print(paste("except",
-                        cur_oktmo,
-                        col_name))
-            except_oktmo[exc_cnt] <- cur_oktmo
-            except_col[exc_cnt] <- col_name
+            fit.exc <- randomForest(as.formula(paste(col_name,
+                                                     " ~ date_int")),
+                                    data = df_lm_part, ntree=50)
             
-            if (col_name != "сucumbers_tomatoes")
-            {
-              fit.exc <- randomForest(as.formula(paste(col_name,
-                                                       " ~ date_int")),
-                                      data = df_lm_part, ntree=50)
-              
-              
-              df_predict <- df_predict %>%
-                mutate(!!col_name := predict(fit.exc,
-                                             df_predict))
-              
-            }
-            else
-            {
-              fit.exc <- glm(as.formula(paste(col_name,
-                                              " ~ shifted")),
-                             data = df_lm_part)
-              
-              df_predict <- df_predict %>%
-                mutate(!!col_name := predict(fit.exc,
-                                             df_predict))
-              
-              # df_predict[[col_name]][df_predict$date > as.Date("2021-04-20")] <-
-              #   df_predict[[col_name]][df_predict$date == as.Date("2021-04-20")]
-              
-            }
+            
+            df_predict <- df_predict %>%
+              mutate(!!col_name := predict(fit.exc,
+                                           df_predict))
+            
+          }
+          else
+          {
+            fit.exc <- glm(as.formula(paste(col_name,
+                                            " ~ shifted")),
+                           data = df_lm_part)
+            
+            df_predict <- df_predict %>%
+              mutate(!!col_name := predict(fit.exc,
+                                           df_predict))
+            
+            # df_predict[[col_name]][df_predict$date > as.Date("2021-04-20")] <-
+            #   df_predict[[col_name]][df_predict$date == as.Date("2021-04-20")]
+            
           }
         }
       }
@@ -378,9 +282,6 @@ for (cur_oktmo in oktmo_set$oktmo){
       df_predict_reg)
 }
 
-# write_csv(tibble(ident = names(best_method), 
-#                  best_num = best_method),
-#           "1/best_method.csv")
 
 est_sort <- sort(estimates)
 

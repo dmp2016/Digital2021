@@ -83,7 +83,7 @@ rates <- c()
 errors <- c()
 rates <- c()
 coefs_date_int <- c()
-
+errors <- matrix(ncol = 9, nrow = 0)
 
 set.seed(42)
 for (cur_oktmo in oktmo_set$oktmo){
@@ -348,6 +348,8 @@ for (cur_oktmo in oktmo_set$oktmo){
       df_predict_1 <- df_predict_1 %>% mutate(!!col_name := predict(fit.glm, df_predict_1))
       err_methods[9] <- calc_error(df_predict_1[[col_name]], df_predict_1[[paste0(col_name, ".ans")]])
 
+      
+      errors <- rbind(errors, err_methods)
       best_method[ident] <- which.min(err_methods)
 
       bm <- best_method[ident]
@@ -560,6 +562,17 @@ df_best_method <- tibble(ident = names(best_method),
                          cors_shifted = cors_shifted,
                          rates = rates,
                          coefs_date_int = coefs_date_int)
+
+
+df_best_method$m1 <- errors[, 1]
+df_best_method$m2 <- errors[, 2]
+df_best_method$m3 <- errors[, 3]
+df_best_method$m4 <- errors[, 4]
+df_best_method$m5 <- errors[, 5]
+df_best_method$m6 <- errors[, 6]
+df_best_method$m7 <- errors[, 7]
+df_best_method$m8 <- errors[, 8]
+df_best_method$m9 <- errors[, 9]
 
 write_csv(df_best_method, "1/best_method.csv")
 
