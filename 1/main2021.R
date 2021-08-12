@@ -12,10 +12,7 @@ library(RcppRoll)
 # install.packages("randomForest")
 
 
-calc_error <- function(truth, test){
-  test <- ifelse(test < 0, 0, test)
-  return(mean(abs(truth - test))/mean(truth))
-}
+source("1/utils.R")
 
 C_CUR_YEAR <- "2021"
 C_PREV_YEAR <- as.character(as.integer(C_CUR_YEAR) - 1)
@@ -75,14 +72,16 @@ estimates <- c()
 
 # prev year only: 0.007461143484185842
 
-df_best_method <- read_csv("1/best_method.csv")
+df_best_method_column <- read_csv("1/best_method_column.csv")
 
-df_best_method %>% 
-  group_by(best_num) %>% 
-  summarise(cnt = n())
+tmp <- df_best_method_column %>% 
+  filter(cnt >= 40) %>% 
+  group_by(col_name) %>% 
+  filter(cnt == max(cnt))
 
-best_method2021 <- df_best_method$best_num
-names(best_method2021) <- df_best_method$ident
+
+best_method2021 <- tmp$best_num
+names(best_method2021) <- tmp$col_name
 
 set.seed(42)
 for (cur_oktmo in oktmo_set$oktmo){
@@ -183,7 +182,7 @@ for (cur_oktmo in oktmo_set$oktmo){
     if (nrow(df_lm_part) > 0 & sum(df_lm_part[[col_name]]) != 0)
     {
 
-      bm <- best_method2021[ident]
+      bm <- best_method2021[col_name]
       
       if (!is.na(bm))
       {

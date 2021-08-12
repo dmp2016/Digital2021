@@ -76,6 +76,15 @@ estimates <- c()
 # prev year only: 0.007461143484185842
 
 best_method <- c()
+cors_col_prev <- c()
+cors_date <- c()
+cors_shifted <- c()
+rates <- c()
+errors <- c()
+rates <- c()
+coefs_date_int <- c()
+
+
 set.seed(42)
 for (cur_oktmo in oktmo_set$oktmo){
   print(cur_oktmo)
@@ -183,6 +192,13 @@ for (cur_oktmo in oktmo_set$oktmo){
           as.Date("2020-06-30")))
 
       err_methods <- c()
+      
+      cors_shifted[ident] <- cor.test(df_lm_part[[col_name]], df_lm_part$shifted)$estimate
+
+      cors_col_prev[ident] <- cor.test(df_lm_part[[col_name]], df_lm_part[[col_name_prev]])$estimate
+      
+      cors_date[ident] <- cor.test(df_lm_part[[col_name]], df_lm_part$date_int)$estimate
+      
       # 1
       lm_formula <- paste(col_name,
                           " ~ date_int + week + ",
@@ -244,8 +260,19 @@ for (cur_oktmo in oktmo_set$oktmo){
                      data = df_lm_part)
 
       
+      sf <- summary(fit.glm)
+      
       df_predict_1 <- df_predict_1 %>% mutate(!!col_name := predict(fit.glm, df_predict_1))
       err_methods[4] <- calc_error(df_predict_1[[col_name]], df_predict_1[[paste0(col_name, ".ans")]])
+      
+      rate <- mean(df_predict_1[[col_name]][between(df_predict_1$date,
+                                                  as.Date("2020-06-20"),
+                                                  as.Date("2020-06-30"))]) /
+        mean(df_predict_1[[col_name]][between(df_predict_1$date,
+                                            as.Date("2020-04-01"),
+                                            as.Date("2020-04-10"))])
+      rates[ident] <- rate
+      coefs_date_int[ident] <- sf$coefficients["date_int", 1]
 
       
       # 5
@@ -312,7 +339,7 @@ for (cur_oktmo in oktmo_set$oktmo){
       
       # 9
       lm_formula <- paste(col_name,
-                          " ~ date_int + week")
+                          " ~ date_int")
       
       fit.glm <- glm(as.formula(lm_formula),
                      data = df_lm_part)
@@ -406,7 +433,7 @@ for (cur_oktmo in oktmo_set$oktmo){
              {
                # 9
                lm_formula <- paste(col_name,
-                                   " ~ date_int + week")
+                                   " ~ date_int")
                
                fit.glm <- glm(as.formula(lm_formula),
                               data = df_lm_part)
@@ -512,9 +539,45 @@ for (cur_oktmo in oktmo_set$oktmo){
       df_predict_reg)
 }
 
-# write_csv(tibble(ident = names(best_method), 
-#                  best_num = best_method),
-#           "1/best_method.csv")
+sum(names(cors_col_prev) != names(best_method))
+sum(names(cors_date) != names(best_method))
+sum(names(cors_shifted) != names(best_method))
+sum(names(rates) != names(best_method))
+
+head(cors_col_prev)
+head(cors_date)
+head(cors_shifted)
+head(rates)
+head(coefs_date_int)
+
+cors_date[1]
+
+
+df_best_method <- tibble(ident = names(best_method),
+                         best_num = best_method,
+                         cors_col_prev = cors_col_prev,
+                         cors_date = cors_date,
+                         cors_shifted = cors_shifted,
+                         rates = rates,
+                         coefs_date_int = coefs_date_int)
+
+write_csv(df_best_method, "1/best_method.csv")
+
+df_best_method$col_name <- sapply(df_best_method$ident, function(x){
+  strsplit(x, ".", 1)[[1]][2]  })
+
+names(df_best_method$col_name) <- NULL
+
+
+
+df_best_method_column <- df_best_method %>% 
+  group_by(col_name, best_num) %>% 
+  summarise(cnt = n(), .groups = "drop") %>% 
+  group_by(col_name) %>% 
+  filter(cnt == max(cnt)) %>% 
+  ungroup()
+
+write_csv(df_best_method_column, "1/best_method_column.csv")
 
 est_sort <- sort(estimates)
 
