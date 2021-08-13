@@ -6,7 +6,6 @@ library(lubridate)
 library(randomForest)
 library(car)
 library(RcppRoll)
-library(forecast)
 # install.packages("optimization")
 # install.packages('Rcpp')
 # install.packages('car')
@@ -61,15 +60,18 @@ predict_dates_int = start_date_int:finish_date_int
 
 cur_oktmo <- "98000000000"
 # 
-col_name <-  "bread"
+col_name <-  "mutton"
 
 res_predict <- NULL
 
 exc_cnt <- 0
-
 except_oktmo <- c()
 except_col <- c()
-estimates <- c()
+
+exc_cnt2 <- 0
+except_oktmo2 <- c()
+except_col2 <- c()
+
 
 # prev year only: 0.007461143484185842
 
@@ -112,42 +114,36 @@ for (cur_oktmo in oktmo_set$oktmo){
   for (col_name in predict_cols){
     ident <- paste0(cur_oktmo, ".", col_name)
     col_name_prev <- paste0(col_name, ".prev")
-
+    
     df_lm_part <- df_lm %>% 
       arrange(date)
     
-    # freq <- 4 + which.min(sapply(5:14, function(x){
-    #   data <- ts(df_lm_part[[col_name]], frequency = x)
-    #   dc <- decompose(data)
-    #   r <- na.omit(dc$random)
-    #   return(max(r) - min(r)) }))
     
-    freq <- 7
-    
-    df_lm_part$week <- factor(df_lm_part$date_int %% freq)
-    df_predict$week <- factor(df_predict$date_int %% freq)
-    
-    
-    col_prev_data_smooth <- roll_mean(df_prev_fit_reg[[col_name_prev]],
-                                      n = 7)
-    
+    # col_prev_data_smooth <- roll_mean(df_prev_fit_reg[[col_name_prev]],
+    #                                   n = 7)
+    # 
     # shift_prev_smooth <- which.max(sapply(1:25, function(x){
     #   cor.test(col_prev_data_smooth[x:(x + nrow(df_lm_part) - 1)],
     #            df_lm_part[[col_name]])$conf.int[1]}))
-    
+    # 
     # if (length(shift_prev_smooth) == 0)
     #   shift_prev_smooth <- 1
     
     
     col_prev_data <- df_prev_fit_reg[[col_name_prev]]
     
-    shift_prev <- which.max(sapply(1:25, function(x){
-      cor.test(col_prev_data[x:(x + nrow(df_lm_part) - 1)],
-               df_lm_part[[col_name]])$conf.int[1]}))
-    
-    if (length(shift_prev) == 0)
+    if (sd(df_lm_part[[col_name]]) == 0 | sd(col_prev_data) == 0){
       shift_prev <- 1
-    
+    }
+    else{
+      shift_prev <- which.max(sapply(1:25, function(x){
+        cor.test(col_prev_data[x:(x + nrow(df_lm_part) - 1)],
+                 df_lm_part[[col_name]])$conf.int[1]}))
+      
+      if (length(shift_prev) == 0)
+        shift_prev <- 1
+    }
+
     df_lm_part[["shifted"]] <- col_prev_data[shift_prev:(shift_prev + nrow(df_lm_part) - 1)]
     df_predict[["shifted"]] <- col_prev_data[shift_prev:(shift_prev + nrow(df_predict) - 1)]
     
@@ -171,26 +167,18 @@ for (cur_oktmo in oktmo_set$oktmo){
     df_lm_part <- df_lm_part %>%
       arrange(df_lm[[col_name]])
     
-    n_side <- 8
-    while (nrow(df_lm_part[n_side:(nrow(df_lm_part) - n_side), ] %>%
-                select(week) %>%
-                distinct()) < freq)
-      n_side <- n_side - 1
-    
-    df_lm_part <- df_lm_part[n_side:(nrow(df_lm_part) - n_side), ]
-    
-    # if (nrow(df_lm_part[8:(nrow(df_lm_part) - 8), ] %>%
-    #          select(week) %>%
-    #          distinct()) == freq){
-    #   df_lm_part <- df_lm_part[8:(nrow(df_lm_part) - 8), ]
-    # }
-    # else
-    #   df_lm_part <- df_lm_part[7:(nrow(df_lm_part) - 7), ]
+    if (nrow(df_lm_part[8:(nrow(df_lm_part) - 8), ] %>%
+             select(week) %>%
+             distinct()) == 7){
+      df_lm_part <- df_lm_part[8:(nrow(df_lm_part) - 8), ]
+    }
+    else
+      df_lm_part <- df_lm_part[7:(nrow(df_lm_part) - 7), ]
     
     
     if (nrow(df_lm_part) > 0 & sum(df_lm_part[[col_name]]) != 0)
     {
-
+      
       lm_formula <- paste(col_name,
                           " ~ date_int + week + ",
                           col_name_prev)
@@ -200,6 +188,14 @@ for (cur_oktmo in oktmo_set$oktmo){
                      data = df_lm_part)
       
       sf <-  summary(fit.glm)
+
+      if (min(sf$coefficients[3:8, 4]) > 0.2){
+        lm_formula <- str_replace(lm_formula, fixed("+ week"), "")
+        
+        fit.glm <- glm(as.formula(lm_formula),
+                       data = df_lm_part)
+      }
+      
       
       if (last(sf$coefficients[, 1]) < 0)
       {
@@ -208,48 +204,33 @@ for (cur_oktmo in oktmo_set$oktmo){
         
         fit.glm <- glm(as.formula(lm_formula),
                        data = df_lm_part)
-        
-        sf <-  summary(fit.glm)
       }
       
+      sf <- summary(fit.glm)
+      
+
       
       df_predict <- df_predict %>% mutate(!!col_name := predict(fit.glm, df_predict))
-
-      rm <- roll_mean(df_predict[[col_name]])
       
-      rate <- (max(rm) - min(rm)) / max(rm)
       
-      # rate <- mean(df_predict[[col_name]][between(df_predict$date,
-      #                                             as.Date("2021-06-20"),
-      #                                             as.Date("2021-06-30"))]) /
-      #   mean(df_predict[[col_name]][between(df_predict$date,
-      #                                       as.Date("2021-04-01"),
-      #                                       as.Date("2021-04-10"))])
-      
-      if (rate > 0.8)
+      if (min(df_lm_part[[col_name]]) > 0)
       {
-        exc_cnt <- exc_cnt + 1
-        print(paste("except",
-                    cur_oktmo,
-                    col_name))
-        except_oktmo[exc_cnt] <- cur_oktmo
-        except_col[exc_cnt] <- col_name
-        
-        
-        if (col_name == "сucumbers_tomatoes")
+        rate <- mean(df_predict[[col_name]][between(df_predict$date,
+                                                    as.Date("2021-06-20"),
+                                                    as.Date("2021-06-30"))]) /
+          mean(df_predict[[col_name]][between(df_predict$date,
+                                              as.Date("2021-04-01"),
+                                              as.Date("2021-04-10"))])
+        if (rate < 1/1.8 | rate > 1.8)
         {
-          fit.exc <- glm(as.formula(paste(col_name,
-                                          " ~ shifted")),
-                         data = df_lm_part)
+          exc_cnt <- exc_cnt + 1
+          print(paste("except",
+                      cur_oktmo,
+                      col_name))
+          except_oktmo[exc_cnt] <- cur_oktmo
+          except_col[exc_cnt] <- col_name
           
-          df_predict <- df_predict %>%
-            mutate(!!col_name := predict(fit.exc,
-                                         df_predict))
-          
-        }
-        else
-          if ((substr(col_name, 1, 6) != "mutton" & 
-               substr(col_name, 1, 9) != "margarine") | sf$coefficients["date_int", 1] > 0)
+          if (col_name != "сucumbers_tomatoes")
           {
             fit.exc <- randomForest(as.formula(paste(col_name,
                                                      " ~ date_int")),
@@ -261,8 +242,25 @@ for (cur_oktmo in oktmo_set$oktmo){
                                            df_predict))
             
           }
+          else
+          {
+            fit.exc <- glm(as.formula(paste(col_name,
+                                            " ~ shifted")),
+                           data = df_lm_part)
+            
+            df_predict <- df_predict %>%
+              mutate(!!col_name := predict(fit.exc,
+                                           df_predict))
+            
+          }
+        }
       }
-
+      else{
+        exc_cnt2 <- exc_cnt2 + 1
+        except_oktmo2[exc_cnt2] <- cur_oktmo
+        except_col2[exc_cnt2] <- col_name
+      }
+      
       df_predict[[col_name]] <- ifelse(df_predict[[col_name]] < 0, 
                                        0, 
                                        df_predict[[col_name]])
@@ -370,9 +368,19 @@ ggplot(data = df_train_date %>%
 
 
 
-for (ind in 1:exc_cnt){
-  col_name <- except_col[ind]
-  cur_oktmo <- except_oktmo[ind]
+
+w_exc_cnt <- exc_cnt2
+w_except_col <- except_col2
+w_except_oktmo <- except_oktmo2
+
+
+w_exc_cnt <- exc_cnt
+w_except_col <- except_col
+w_except_oktmo <- except_oktmo
+
+for (ind in 1:w_exc_cnt){
+  col_name <- w_except_col[ind]
+  cur_oktmo <- w_except_oktmo[ind]
   show(ggplot(data = df_train_date %>% 
                 filter(oktmo == cur_oktmo)) +
          geom_point(aes(x = date, 
