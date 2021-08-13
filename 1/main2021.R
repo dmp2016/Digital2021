@@ -189,26 +189,22 @@ for (cur_oktmo in oktmo_set$oktmo){
       
       sf <-  summary(fit.glm)
 
-      if (min(sf$coefficients[3:8, 4]) > 0.2){
-        lm_formula <- str_replace(lm_formula, fixed("+ week"), "")
-        
-        fit.glm <- glm(as.formula(lm_formula),
-                       data = df_lm_part)
-      }
-      
-      
-      if (last(sf$coefficients[, 1]) < 0)
-      {
-        lm_formula <- paste(col_name,
-                            " ~ date_int + week")
-        
-        fit.glm <- glm(as.formula(lm_formula),
-                       data = df_lm_part)
-      }
-      
-      sf <- summary(fit.glm)
-      
+      predictors <- c()
+      if (min(sf$coefficients[3:8, 4]) < 0.2)
+        predictors["week"] <- "week"
 
+      if (dim(sf$coefficients)[1] > 8)
+      {
+        if (sf$coefficients[9, 1] > 0 & sf$coefficients[9, 4] < 0.2)
+          predictors["prev"] <- col_name_prev
+      }
+
+      
+      lm_formula <- paste(c("date_int", predictors), collapse = " + ")
+      
+      lm_formula <- paste(col_name,
+                          " ~ ",
+                          lm_formula)
       
       df_predict <- df_predict %>% mutate(!!col_name := predict(fit.glm, df_predict))
       
@@ -402,7 +398,7 @@ for (ind in 1:w_exc_cnt){
                     aes(x = date, 
                         y = .data[[paste0(col_name,
                                           ".prev")]]), col = "green") +
-         ggtitle(cur_oktmo))
+         ggtitle(paste(cur_oktmo, ind)))
   
 }
 
