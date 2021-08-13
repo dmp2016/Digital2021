@@ -58,9 +58,9 @@ finish_date_int <- as.integer(difftime(finish_predict, min_date, units = "days")
 predict_dates_int = start_date_int:finish_date_int
 
 
-cur_oktmo <- "98000000000"
+cur_oktmo <- "33000000000"
 # 
-col_name <-  "mutton"
+col_name <-  "ai98"
 
 res_predict <- NULL
 
@@ -71,6 +71,11 @@ except_col <- c()
 exc_cnt2 <- 0
 except_oktmo2 <- c()
 except_col2 <- c()
+
+exc_cnt3 <- 0
+except_oktmo3 <- c()
+except_col3 <- c()
+
 
 
 # prev year only: 0.007461143484185842
@@ -143,7 +148,7 @@ for (cur_oktmo in oktmo_set$oktmo){
       if (length(shift_prev) == 0)
         shift_prev <- 1
     }
-
+    
     df_lm_part[["shifted"]] <- col_prev_data[shift_prev:(shift_prev + nrow(df_lm_part) - 1)]
     df_predict[["shifted"]] <- col_prev_data[shift_prev:(shift_prev + nrow(df_predict) - 1)]
     
@@ -188,23 +193,27 @@ for (cur_oktmo in oktmo_set$oktmo){
                      data = df_lm_part)
       
       sf <-  summary(fit.glm)
-
-      predictors <- c()
-      if (min(sf$coefficients[3:8, 4]) < 0.2)
-        predictors["week"] <- "week"
-
-      if (dim(sf$coefficients)[1] > 8)
-      {
-        if (sf$coefficients[9, 1] > 0 & sf$coefficients[9, 4] < 0.2)
-          predictors["prev"] <- col_name_prev
+      
+      if (min(sf$coefficients[3:8, 4]) > 0.2){
+        lm_formula <- str_replace(lm_formula, fixed("+ week"), "")
+        
+        fit.glm <- glm(as.formula(lm_formula),
+                       data = df_lm_part)
       }
-
       
-      lm_formula <- paste(c("date_int", predictors), collapse = " + ")
       
-      lm_formula <- paste(col_name,
-                          " ~ ",
-                          lm_formula)
+      if (last(sf$coefficients[, 1]) < 0)
+      {
+        lm_formula <- paste(col_name,
+                            " ~ date_int + week")
+        
+        fit.glm <- glm(as.formula(lm_formula),
+                       data = df_lm_part)
+      }
+      
+      sf <- summary(fit.glm)
+      
+      
       
       df_predict <- df_predict %>% mutate(!!col_name := predict(fit.glm, df_predict))
       
@@ -255,6 +264,14 @@ for (cur_oktmo in oktmo_set$oktmo){
         exc_cnt2 <- exc_cnt2 + 1
         except_oktmo2[exc_cnt2] <- cur_oktmo
         except_col2[exc_cnt2] <- col_name
+      }
+      
+      if (sum(df_lm_part[[col_name]] == 0) > 1 + nrow(df_lm_part) / 2){
+        df_predict[[col_name]] <- 0
+        
+        exc_cnt3 <- exc_cnt3 + 1
+        except_oktmo3[exc_cnt3] <- cur_oktmo
+        except_col3[exc_cnt3] <- col_name
       }
       
       df_predict[[col_name]] <- ifelse(df_predict[[col_name]] < 0, 
@@ -364,6 +381,11 @@ ggplot(data = df_train_date %>%
 
 
 
+w_exc_cnt <- exc_cnt3
+w_except_col <- except_col3
+w_except_oktmo <- except_oktmo3
+
+
 
 w_exc_cnt <- exc_cnt2
 w_except_col <- except_col2
@@ -398,7 +420,7 @@ for (ind in 1:w_exc_cnt){
                     aes(x = date, 
                         y = .data[[paste0(col_name,
                                           ".prev")]]), col = "green") +
-         ggtitle(paste(cur_oktmo, ind)))
+         ggtitle(cur_oktmo))
   
 }
 
