@@ -76,7 +76,8 @@ exc_cnt3 <- 0
 except_oktmo3 <- c()
 except_col3 <- c()
 
-
+rates1 <- c()
+rates2 <- c()
 
 # prev year only: 0.007461143484185842
 
@@ -172,13 +173,13 @@ for (cur_oktmo in oktmo_set$oktmo){
     df_lm_part <- df_lm_part %>%
       arrange(df_lm[[col_name]])
     
-    if (nrow(df_lm_part[8:(nrow(df_lm_part) - 8), ] %>%
-             select(week) %>%
-             distinct()) == 7){
-      df_lm_part <- df_lm_part[8:(nrow(df_lm_part) - 8), ]
-    }
-    else
-      df_lm_part <- df_lm_part[7:(nrow(df_lm_part) - 7), ]
+    n_side <- 9
+    while (nrow(df_lm_part[n_side:(nrow(df_lm_part) - n_side), ] %>%
+                select(week) %>%
+                distinct()) < 7)
+      n_side <- n_side - 1
+    
+    df_lm_part <- df_lm_part[n_side:(nrow(df_lm_part) - n_side), ]
     
     
     if (nrow(df_lm_part) > 0 & sum(df_lm_part[[col_name]]) != 0)
@@ -194,25 +195,22 @@ for (cur_oktmo in oktmo_set$oktmo){
       
       sf <-  summary(fit.glm)
       
-      if (min(sf$coefficients[3:8, 4]) > 0.2){
-        lm_formula <- str_replace(lm_formula, fixed("+ week"), "")
-        
-        fit.glm <- glm(as.formula(lm_formula),
-                       data = df_lm_part)
-      }
+      predictors <- c()
+      if (min(sf$coefficients[3:8, 4]) < 0.2)
+        predictors["week"] <- "week"
       
-      
-      if (last(sf$coefficients[, 1]) < 0)
+      if (dim(sf$coefficients)[1] > 8)
       {
-        lm_formula <- paste(col_name,
-                            " ~ date_int + week")
-        
-        fit.glm <- glm(as.formula(lm_formula),
-                       data = df_lm_part)
+        if (sf$coefficients[9, 1] > 0 & sf$coefficients[9, 4] < 0.2)
+          predictors["prev"] <- col_name_prev
       }
+      
+      lm_formula <- paste(c("date_int", predictors), collapse = " + ")
+
+      fit.glm <- glm(as.formula(paste(col_name, "~", lm_formula)),
+                     data = df_lm_part)
       
       sf <- summary(fit.glm)
-      
       
       
       df_predict <- df_predict %>% mutate(!!col_name := predict(fit.glm, df_predict))
@@ -220,13 +218,19 @@ for (cur_oktmo in oktmo_set$oktmo){
       
       if (min(df_lm_part[[col_name]]) > 0)
       {
-        rate <- mean(df_predict[[col_name]][between(df_predict$date,
-                                                    as.Date("2021-06-20"),
-                                                    as.Date("2021-06-30"))]) /
-          mean(df_predict[[col_name]][between(df_predict$date,
-                                              as.Date("2021-04-01"),
-                                              as.Date("2021-04-10"))])
-        if (rate < 1/1.8 | rate > 1.8)
+        
+        a <- mean(df_predict[[col_name]][between(df_predict$date,
+                                                 as.Date("2021-06-20"),
+                                                 as.Date("2021-06-30"))])
+        
+        b <- mean(df_predict[[col_name]][between(df_predict$date,
+                                                 as.Date("2021-04-01"),
+                                                 as.Date("2021-04-10"))])
+        rate <- a / b
+        
+        rates1[ident] <- rate
+        rates2[ident] <- abs(a - b)/b
+        if (abs(a - b)/b > 0.5)
         {
           exc_cnt <- exc_cnt + 1
           print(paste("except",
@@ -313,6 +317,7 @@ for (cur_oktmo in oktmo_set$oktmo){
 
 
 print(exc_cnt)
+
 res_predict$date <- res_predict$date_int + min_date
 
 df_test <- read_csv("1/test.csv", 
