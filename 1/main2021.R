@@ -247,18 +247,28 @@ for (cur_oktmo in oktmo_set$oktmo){
           
           if (col_name != "сucumbers_tomatoes")
           {
-            fit.exc <- randomForest(as.formula(paste(col_name,
-                                                     " ~ date_int")),
-                                    data = df_lm_part, ntree=50)
-
-
-            df_predict <- df_predict %>%
-              mutate(!!col_name := predict(fit.exc,
-                                           df_predict))
             
-            df_predict[[col_name]]
-            min(df_predict[[col_name]][df_predict$date < as.Date("2021-04-01")])
+            if (rate > 1){
+              a <- max(df_predict[[col_name]]
+                       [df_predict$date <= as.Date("2021-04-15")])
+              df_predict[[col_name]][df_predict$date > as.Date("2021-04-15")] <- a
+            }
+            else{
+              a <- min(df_predict[[col_name]]
+                       [df_predict$date <= as.Date("2021-04-15")])
+              df_predict[[col_name]][df_predict$date > as.Date("2021-04-15")] <- a
+            }
+
             
+            # fit.exc <- randomForest(as.formula(paste(col_name,
+            #                                          " ~ date_int")),
+            #                         data = df_lm_part, ntree=50)
+            # 
+            # 
+            # df_predict <- df_predict %>%
+            #   mutate(!!col_name := predict(fit.exc,
+            #                                df_predict))
+
           }
           else
           {
